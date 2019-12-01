@@ -44,7 +44,10 @@ fn main() {
         }
     }
 
-    println!("{}", sum);
+    println!("Fuel for modules: {}", sum);
+    let fuel_for_fuel = FuelModule::from(Fuel::new(sum)).fuel_required();
+    println!("Fuel for fuel:    {}", fuel_for_fuel.0);
+    println!("Total:            {}", sum + fuel_for_fuel.0);
 }
 
 #[derive(Debug)]
