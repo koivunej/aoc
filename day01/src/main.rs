@@ -10,6 +10,7 @@ fn main() {
 
 
     let mut sum = 0.0f64;
+    let mut stage2_sum = 0.0f64;
 
     for (line_num, line) in locked.lines().enumerate() {
         if let Err(e) = line {
@@ -36,7 +37,12 @@ fn main() {
 
         let module = Module::from_mass(mass);
         match module.fuel_required() {
-            Ok(Fuel(f)) => sum += f,
+            Ok(f) => {
+                sum += f.0;
+
+                // not really on board how this is calculated for each module
+                stage2_sum += FuelModule::from(f).fuel_required().0;
+            },
             Err(e) => {
                 eprintln!("Invalid fuel requirement for {:?}: {:?}", module, e);
                 std::process::exit(1);
@@ -48,6 +54,9 @@ fn main() {
     let fuel_for_fuel = FuelModule::from(Fuel::new(sum)).fuel_required();
     println!("Fuel for fuel:    {}", fuel_for_fuel.0);
     println!("Total:            {}", sum + fuel_for_fuel.0);
+    println!("---");
+    println!("Fuel req per module: {}", stage2_sum);
+    println!("Total:               {}", stage2_sum + sum);
 }
 
 #[derive(Debug)]
