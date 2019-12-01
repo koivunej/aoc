@@ -61,8 +61,51 @@ impl Module {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone)]
+struct FuelModule { fuel: Fuel }
+
+impl From<Fuel> for FuelModule {
+    fn from(fuel: Fuel) -> Self {
+        Self { fuel }
+    }
+}
+
+impl FuelModule {
+    fn fuel_required(&self) -> Fuel {
+        let mut sum = 0.0f64;
+
+        let mut next = FuelModule::clone(self);
+
+        loop {
+            let amount = next.as_module().fuel_required().unwrap_or_default();
+            if amount.0 == 0.0f64 {
+                return Fuel::new(sum);
+            }
+            sum += amount.0;
+            next = FuelModule::from(amount);
+        }
+    }
+
+    fn as_module(&self) -> Module {
+        Module::from_mass(self.fuel.0)
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
 struct Fuel(f64);
+
+impl std::default::Default for Fuel {
+    fn default() -> Self {
+        Self(0.0)
+    }
+}
+
+impl Fuel {
+    fn new(fuel: f64) -> Self {
+        assert!(fuel >= 0.0);
+        Self(fuel)
+    }
+}
 
 impl PartialEq<f64> for Fuel {
     fn eq(&self, other: &f64) -> bool { self.0 == *other }
@@ -85,10 +128,11 @@ impl TryFrom<f64> for Fuel {
 
 #[cfg(test)]
 mod test {
-    use super::Module;
+    use std::convert::TryFrom;
+    use super::{Module, Fuel, FuelModule};
 
     #[test]
-    fn examples() {
+    fn module_fuel_examples() {
         let masses = &[12, 14, 1969, 100756];
         let answers = &[2, 2, 654, 33583];
 
@@ -102,6 +146,24 @@ mod test {
 
         for (actual, expected) in solutions {
             assert_eq!(actual.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn fuel_fuel_examples() {
+        let fuel_masses = &[2, 654, 33583];
+        let answers = &[0, 966 - 654, 50346 - 33583];
+
+        let solutions = fuel_masses
+            .iter()
+            .map(|m| *m as f64)
+            .map(|m| Fuel::try_from(m).unwrap())
+            .map(FuelModule::from)
+            .map(|fm| fm.fuel_required())
+            .zip(answers.iter().map(|a| *a as f64));
+
+        for (actual, expected) in solutions {
+            assert_eq!(actual.0, expected);
         }
     }
 }
