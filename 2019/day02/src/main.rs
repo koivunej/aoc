@@ -43,6 +43,15 @@ enum OpCode {
     Halt,
 }
 
+impl OpCode {
+    fn len(&self) -> usize {
+        match *self {
+            OpCode::BinOp(_) => 4,
+            OpCode::Halt => 1,
+        }
+    }
+}
+
 #[derive(Debug)]
 enum BinOp {
     Add,
@@ -97,24 +106,26 @@ impl<'a> Program<'a> {
     }
 
     fn eval(&mut self) {
-        let mut index = 0;
+        let mut ip = 0;
         loop {
-            match OpCode::try_from(self.prog[index]) {
+            let skipped = match OpCode::try_from(self.prog[ip]) {
                 Ok(OpCode::Halt) => return,
                 Ok(OpCode::BinOp(b)) => {
 
                     let res = b.eval(
-                        self.indirect_value(index + 1),
-                        self.indirect_value(index + 2));
+                        self.indirect_value(ip + 1),
+                        self.indirect_value(ip + 2));
 
-                    self.indirect_store(index + 3, res);
+                    self.indirect_store(ip + 3, res);
+
+                    OpCode::BinOp(b).len()
                 },
                 Err(_) => {
-                    panic!("Invalid opcode at {}: {}", index, self.prog[index]);
+                    panic!("Invalid opcode at {}: {}", ip, self.prog[ip]);
                 }
-            }
+            };
 
-            index = (index + 4) % self.prog.len();
+            ip = (ip + skipped) % self.prog.len();
         }
     }
 
