@@ -29,13 +29,51 @@ fn main() {
         }
     }
 
-    // restore
-    data[1] = 12;
-    data[2] = 2;
+    // stage1
+    {
+        let mut data = Vec::clone(&data);
 
-    Program::wrap_and_eval(&mut data);
+        // restore
+        data[1] = 12;
+        data[2] = 2;
 
-    println!("Value at position 0: {}", data[0]);
+        Program::wrap_and_eval(&mut data);
+
+        println!("Value at position 0: {}", data[0]);
+    }
+
+    {
+        let magic = 19690720;
+
+        if let Some((i, j)) = find_coords(&data[..], magic) {
+            println!("Found it at {:?}: 100 * noun + verb == {}", (i, j), 100 * i + j);
+        } else {
+            println!("Did not find...");
+        }
+    }
+
+}
+
+fn find_coords(input: &[isize], magic: isize) -> Option<(isize, isize)> {
+
+    let mut copy = input.to_vec();
+
+    for i in 0..100 {
+        for j in 0..100 {
+            copy[1] = i;
+            copy[2] = j;
+
+            Program::wrap_and_eval(&mut copy);
+
+            if copy[0] == magic {
+                return Some((i, j));
+            }
+
+            copy.copy_from_slice(&input[..]);
+        }
+    }
+
+    None
 }
 
 enum OpCode {
