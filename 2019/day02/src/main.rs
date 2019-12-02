@@ -60,7 +60,6 @@ enum BinOp {
 
 impl BinOp {
     fn eval(&self, lhs: isize, rhs: isize) -> isize {
-        eprintln!("BinOp::{:?}({}, {})", self, lhs, rhs);
         match *self {
             BinOp::Add => lhs.checked_add(rhs).expect("Add overflow"),
             BinOp::Mul => lhs.checked_mul(rhs).expect("Mul overflow"),
@@ -92,7 +91,6 @@ impl<'a> Program<'a> {
         let addr = self.prog[index];
         assert!(addr >= 0);
         let val = self.prog[addr as usize];
-        eprintln!("indirect_value({}) -> prog[{}] == {}", index, addr, val);
         val
     }
 
@@ -100,7 +98,6 @@ impl<'a> Program<'a> {
         let index = index % self.prog.len();
         let addr = self.prog[index];
         assert!(addr >= 0);
-        eprintln!("indirect_store({}, {}) -> prog[{}] = {}", index, value, addr, value);
         // probably shouldn't panic?
         self.prog[addr as usize] = value;
     }
