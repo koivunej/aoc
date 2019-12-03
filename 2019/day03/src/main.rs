@@ -25,9 +25,7 @@ fn stage1<T: AsRef<str>>(lines: &[T]) -> Option<usize> {
             central_point.clone(),
             pcs);
 
-        for ls in segments {
-            canvas.paint(&ls, &color, &mut collisions);
-        }
+        canvas.paint(segments, &color, &mut collisions);
     }
 
     collisions.sort_by_key(|(_, _, p)| p.manhattan_distance(&central_point));
@@ -50,9 +48,7 @@ fn stage2<T: AsRef<str>>(lines: &[T]) -> Option<usize> {
             central_point.clone(),
             pcs);
 
-        for ls in segments {
-            canvas.paint(&ls, &color, &mut collisions);
-        }
+        canvas.paint(segments, &color, &mut collisions);
     }
 
     collisions.sort_by_key(|(_, steps, _)| *steps);
@@ -74,40 +70,49 @@ type Color = usize;
 
 impl TwoDimensionalWorld {
     /// The steps in collisions is the combined total steps so far to collide in that position
-    fn paint(&mut self, ls: &LineSegment<usize>, color: &Color, collisions: &mut Vec<(Color, Steps, Point<usize>)>) {
+    fn paint<I>(&mut self, lss: I, color: &Color, collisions: &mut Vec<(Color, Steps, Point<usize>)>)
+        where I: Iterator<Item = LineSegment<usize>>
+    {
 
         let mut last = None;
-        for (steps, p) in ls.iter_including_start().enumerate() {
+        let mut steps = 0;
+        for ls in lss {
+            for p in ls.iter_including_start() {
 
-            self.bounds = match self.bounds.take() {
-                Some(b) => Some((b.0.min(p), b.1.max(p))),
-                None => Some((p, p)),
-            };
+                self.bounds = match self.bounds.take() {
+                    Some(b) => Some((b.0.min(p), b.1.max(p))),
+                    None => Some((p, p)),
+                };
 
-            // had a bug here
-            last = match last.take() {
-                Some((0, x)) if x == p => Some((1, p.clone())),
-                Some((_, x)) if x == p => panic!("Too many duplicate points: {:?}", p),
-                Some((_, _))
-                | None => Some((0, p.clone())),
-            };
+                // had a bug here
+                let (new_last, last_changed) = match last.take() {
+                    Some((0, x)) if x == p => (Some((1, p.clone())), false),
+                    Some((_, x)) if x == p => panic!("Too many duplicate points: {:?}", p),
+                    Some((_, _))
+                    | None => (Some((0, p.clone())), true),
+                };
 
-            match (self.first, self.first_color.get(&p)) {
-                (Some(first), Some((first_color, first_steps)))
-                    if first != p && first_color != color =>
-                {
-                    collisions.push((
-                        first_color.clone(),
-                        dbg!(first_steps.clone() + steps.clone()),
-                        p.clone()
-                    ));
+                last = new_last;
+
+                match (self.first, self.first_color.get(&p)) {
+                    (Some(first), Some((first_color, first_steps)))
+                        if first != p && first_color != color =>
+                    {
+                        collisions.push((
+                            first_color.clone(),
+                            dbg!(first_steps.clone()) + dbg!(steps.clone()),
+                            p.clone()
+                        ));
+                    }
+                    _ => {},
                 }
-                _ => {},
+
+                self.first = self.first.or(Some(p));
+
+                self.first_color.insert(p.clone(), (color.clone(), steps.clone()));
+
+                steps += if last_changed { 1 } else { 0 };
             }
-
-            self.first = self.first.or(Some(p));
-
-            self.first_color.insert(p.clone(), (color.clone(), steps.clone()));
         }
     }
 
@@ -386,7 +391,7 @@ fn two_color_world_collisions() {
     ];
 
     let expected = vec![
-        (0, 20, Point { x: 7, y: 6 }),
+        (0, 30, Point { x: 7, y: 6 }),
         (0, 40, Point { x: 4, y: 4 }),
     ];
 
@@ -397,12 +402,11 @@ fn two_color_world_collisions() {
         let pcs = path.split(',')
             .map(PenCommand::from_str)
             .map(Result::unwrap);
-        let segments = ContinuousLineFromPen::line_segments_from(start.clone(), pcs);
+        let segments = ContinuousLineFromPen::line_segments_from(
+            start.clone(),
+            pcs);
 
-        for ls in segments {
-            println!("painting {:?}", ls);
-            canvas.paint(&ls, &color, &mut collisions);
-        }
+        canvas.paint(segments, &color, &mut collisions);
 
         if color == 0 {
             assert!(collisions.is_empty());
