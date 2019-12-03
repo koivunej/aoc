@@ -61,7 +61,6 @@ fn stage2<T: AsRef<str>>(lines: &[T]) -> Option<usize> {
 #[derive(Default)]
 struct TwoDimensionalWorld {
     first_color: HashMap<Point<usize>, (Color, Steps)>,
-    bounds: Option<(Point<usize>, Point<usize>)>,
     first: Option<Point<usize>>,
 }
 
@@ -81,11 +80,6 @@ impl TwoDimensionalWorld {
         for ls in lss {
             for p in ls.iter_including_start() {
 
-                self.bounds = match self.bounds.take() {
-                    Some(b) => Some((b.0.min(p), b.1.max(p))),
-                    None => Some((p, p)),
-                };
-
                 // had a bug here
                 let (new_last, last_changed) = match last.take() {
                     Some((0, x)) if x == p => (Some((1, p.clone())), false),
@@ -102,7 +96,7 @@ impl TwoDimensionalWorld {
                     {
                         collisions.push((
                             first_color.clone(),
-                            dbg!(first_steps.clone()) + dbg!(steps.clone()),
+                            first_steps.clone() + steps.clone(),
                             p.clone()
                         ));
                     }
@@ -118,10 +112,6 @@ impl TwoDimensionalWorld {
         }
     }
 
-    fn bounds(&self) -> &Option<(Point<usize>, Point<usize>)> {
-        &self.bounds
-    }
-
     fn central_port(&self) -> &Option<Point<usize>> {
         &self.first
     }
@@ -135,6 +125,7 @@ impl LineSegment<usize> {
         PointIterator(self, None)
     }
 
+    #[allow(dead_code)]
     fn iter(&self) -> std::iter::Skip<PointIterator> {
         self.iter_including_start().skip(1)
     }
@@ -416,10 +407,6 @@ fn two_color_world_collisions() {
     }
 
     assert_eq!(collisions, expected);
-
-    let bounds = canvas.bounds().clone().unwrap();
-
-    assert_eq!(((1, 1).into(), (9, 6).into()), bounds);
 }
 
 #[test]
