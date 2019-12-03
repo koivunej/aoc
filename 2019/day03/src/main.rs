@@ -9,6 +9,8 @@ fn main() {
     let lines = locked.lines().map(Result::unwrap).collect::<Vec<_>>();
 
     println!("{:?}", stage1(&lines));
+
+    println!("{:?}", stage2(&lines));
 }
 
 fn stage1<T: AsRef<str>>(lines: &[T]) -> Option<usize> {
