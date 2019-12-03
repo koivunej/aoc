@@ -77,6 +77,9 @@ impl TwoDimensionalWorld {
 
         let mut last = None;
         let mut steps = 0;
+
+        // sadly cannot flat_map ... do not understand how to
+        // to implement borrowing and ownership taking iterator here
         for ls in lss {
             for p in ls.iter_including_start() {
 
