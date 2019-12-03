@@ -183,6 +183,17 @@ impl<T> From<(T, T)> for Point<T> {
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum Direction { Up, Right, Down, Left }
 
+impl Direction {
+    fn step(&self) -> (isize, isize) {
+        match *self {
+            Direction::Up => (0, 1),
+            Direction::Right => (1, 0),
+            Direction::Down => (0, -1),
+            Direction::Left => (-1, 0),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 enum ParseDirectionError {
     InvalidCharacter,
@@ -241,12 +252,7 @@ impl FromStr for PenCommand {
 
 impl PenCommand {
     fn to_line_segment_from(&self, start: Point<usize>) -> LineSegment<usize> {
-        let (dx, dy): (isize, isize) = match self.0 {
-            Direction::Up => (0, 1),
-            Direction::Right => (1, 0),
-            Direction::Down => (0, -1),
-            Direction::Left => (-1, 0),
-        };
+        let (dx, dy) = self.0.step();
         let amount = self.1 as isize;
 
         let (dx, dy) = (amount * dx, amount * dy);
