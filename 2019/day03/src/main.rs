@@ -30,33 +30,61 @@ fn stage1<T: AsRef<str>>(lines: &[T]) -> Option<usize> {
         }
     }
 
-    collisions.sort_by_key(|(_, p)| p.manhattan_distance(&central_point));
+    collisions.sort_by_key(|(_, _, p)| p.manhattan_distance(&central_point));
 
-    collisions.first().cloned().map(|(_color, p)| p)
+    collisions.first().cloned().map(|(_color, _steps, p)| p)
         .map(|p| p.manhattan_distance(&canvas.central_port().unwrap()))
+}
+
+fn stage2<T: AsRef<str>>(lines: &[T]) -> Option<usize> {
+
+    let central_point = Point { x: 1, y: 1 };
+    let mut canvas = TwoDimensionalWorld::default();
+    let mut collisions = Vec::new();
+
+    for (color, path) in lines.iter().enumerate() {
+        let pcs = path.as_ref().split(',')
+            .map(PenCommand::from_str)
+            .map(Result::unwrap);
+        let segments = ContinuousLineFromPen::line_segments_from(
+            central_point.clone(),
+            pcs);
+
+        for ls in segments {
+            canvas.paint(&ls, &color, &mut collisions);
+        }
+    }
+
+    collisions.sort_by_key(|(_, steps, _)| *steps);
+
+    collisions.first().cloned().map(|(_color, steps, _p)| steps)
 }
 
 #[derive(Default)]
 struct TwoDimensionalWorld {
-    first_color: HashMap<Point<usize>, Color>,
+    first_color: HashMap<Point<usize>, (Color, Steps)>,
     bounds: Option<(Point<usize>, Point<usize>)>,
     first: Option<Point<usize>>,
 }
+
+type Steps = usize;
 
 // which wire
 type Color = usize;
 
 impl TwoDimensionalWorld {
-    fn paint(&mut self, ls: &LineSegment<usize>, color: &Color, collisions: &mut Vec<(Color, Point<usize>)>) {
+    /// The steps in collisions is the combined total steps so far to collide in that position
+    fn paint(&mut self, ls: &LineSegment<usize>, color: &Color, collisions: &mut Vec<(Color, Steps, Point<usize>)>) {
 
         let mut last = None;
-        for p in ls.iter_including_start() {
+        for (steps, p) in ls.iter_including_start().enumerate() {
 
             self.bounds = match self.bounds.take() {
                 Some(b) => Some((b.0.min(p), b.1.max(p))),
                 None => Some((p, p)),
             };
 
+            // had a bug here
             last = match last.take() {
                 Some((0, x)) if x == p => Some((1, p.clone())),
                 Some((_, x)) if x == p => panic!("Too many duplicate points: {:?}", p),
@@ -65,15 +93,21 @@ impl TwoDimensionalWorld {
             };
 
             match (self.first, self.first_color.get(&p)) {
-                (Some(first), Some(first_color)) if first != p && first_color != color => {
-                    collisions.push((first_color.clone(), p.clone()));
+                (Some(first), Some((first_color, first_steps)))
+                    if first != p && first_color != color =>
+                {
+                    collisions.push((
+                        first_color.clone(),
+                        dbg!(first_steps.clone() + steps.clone()),
+                        p.clone()
+                    ));
                 }
                 _ => {},
             }
 
             self.first = self.first.or(Some(p));
 
-            self.first_color.insert(p.clone(), color.clone());
+            self.first_color.insert(p.clone(), (color.clone(), steps.clone()));
         }
     }
 
@@ -352,8 +386,8 @@ fn two_color_world_collisions() {
     ];
 
     let expected = vec![
-        (0, Point { x: 7, y: 6 }),
-        (0, Point { x: 4, y: 4 }),
+        (0, 20, Point { x: 7, y: 6 }),
+        (0, 40, Point { x: 4, y: 4 }),
     ];
 
     let mut canvas = TwoDimensionalWorld::default();
@@ -413,4 +447,36 @@ fn full_stage1_example2() {
     ]);
 
     assert_eq!(135, closest.unwrap());
+}
+
+#[test]
+fn simplest_stage2_example() {
+    let closest = stage2(&[
+        "R8,U5,L5,D3",
+        "U7,R6,D4,L4",
+    ]);
+
+    assert_eq!(30, closest.unwrap());
+}
+
+#[test]
+fn full_stage2_example1() {
+
+    let closest = stage1(&[
+        "R75,D30,R83,U83,L12,D49,R71,U7,L72",
+        "U62,R66,U55,R34,D71,R55,D58,R83",
+    ]);
+
+    assert_eq!(610, closest.unwrap());
+}
+
+#[test]
+fn full_stage2_example2() {
+
+    let closest = stage1(&[
+        "R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51",
+        "U98,R91,D20,R16,D67,R40,U7,R15,U6,R7",
+    ]);
+
+    assert_eq!(410, closest.unwrap());
 }
