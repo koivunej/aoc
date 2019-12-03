@@ -80,7 +80,8 @@ impl TwoDimensionalWorld {
         for ls in lss {
             for p in ls.iter_including_start() {
 
-                // had a bug here
+                // had a bug here with repeating values but added a test
+                // line_segment_points_should_be_unique as well
                 let (new_last, last_changed) = match last.take() {
                     Some((0, x)) if x == p => (Some((1, p.clone())), false),
                     Some((_, x)) if x == p => panic!("Too many duplicate points: {:?}", p),
@@ -90,6 +91,10 @@ impl TwoDimensionalWorld {
 
                 last = new_last;
 
+                // all these characters to skip self-collisions and collisions
+                // in the first step, as all of the wires start from the same
+                // position, which I've fixed at (1, 1) ... I didn't expect
+                // it to be fixed :)
                 match (self.first, self.first_color.get(&p)) {
                     (Some(first), Some((first_color, first_steps)))
                         if first != p && first_color != color =>
@@ -107,6 +112,7 @@ impl TwoDimensionalWorld {
 
                 self.first_color.insert(p.clone(), (color.clone(), steps.clone()));
 
+                // line segments overlap during end and start
                 steps += if last_changed { 1 } else { 0 };
             }
         }
@@ -117,6 +123,7 @@ impl TwoDimensionalWorld {
     }
 }
 
+/// Line between two points
 #[derive(PartialEq, Debug)]
 struct LineSegment<T>(Point<T>, Point<T>);
 
@@ -147,6 +154,7 @@ impl<'a> Iterator for PointIterator<'a> {
 
         self.1 = Some(match self.1.take() {
             Some(last) => {
+                // the use of `usize` is "paying" "off" "big" "time"
                 let dx = end.x as isize - last.x as isize;
                 let dy = end.y as isize - last.y as isize;
 
@@ -215,9 +223,11 @@ impl FromStr for Direction {
     }
 }
 
+/// Describes the input command delimited parts
 #[derive(Debug, PartialEq, Clone, Copy)]
 struct PenCommand(Direction, usize);
 
+/// The possible parsing errors; should have used `derive-more`
 #[derive(Debug, PartialEq)]
 enum ParsePenCommandError {
     EmptyInput,
@@ -243,6 +253,7 @@ impl FromStr for PenCommand {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut chars = s.chars();
         let c = chars.next().ok_or(ParsePenCommandError::EmptyInput)?;
+        // learned this "simple" trick
         let (head, tail) = s.split_at(c.len_utf8());
         let dir = Direction::from_str(head)?;
         let amount = usize::from_str(tail)?;
@@ -263,6 +274,8 @@ impl PenCommand {
     }
 }
 
+/// Iterator for line segments produced by iterator of `PenCommand` given a
+/// starting point.
 struct ContinuousLineFromPen<I> {
     inner: I,
     last: Point<usize>,
@@ -292,6 +305,9 @@ impl<I: Iterator<Item = PenCommand>> Iterator for ContinuousLineFromPen<I> {
     }
 }
 
+/// This needed to be a trait as I don't think we can yet
+/// have `impl Point<usize> { ... }` blocks. Nope, it would had
+/// worked if I had tried it...
 trait ManhattanDistance {
     fn manhattan_distance(&self, to: &Self) -> usize;
 }
@@ -324,7 +340,7 @@ fn pencommand_examples() {
 }
 
 #[test]
-fn pen_draw_example() {
+fn line_segment_points() {
     let start = Point { x: 1, y: 1 };
 
     let expected = &[
