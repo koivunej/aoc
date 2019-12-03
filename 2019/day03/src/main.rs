@@ -1,20 +1,24 @@
 use std::str::FromStr;
 use std::collections::HashMap;
+use std::io::BufRead;
 
 fn main() {
-    // N wires
-    // some origin (possibly 1,1 for coords zero at lower left, lower right)
-    // they may have N crossings but we are interested in the closest one to the origin
+    let stdin = std::io::stdin();
+    let locked = stdin.lock();
+
+    let lines = locked.lines().map(Result::unwrap).collect::<Vec<_>>();
+
+    println!("{:?}", stage1(&lines));
 }
 
-fn stage1(lines: &[&str]) -> Option<Point<usize>> {
+fn stage1<T: AsRef<str>>(lines: &[T]) -> Option<usize> {
 
     let central_point = Point { x: 1, y: 1 };
     let mut canvas = TwoDimensionalWorld::default();
     let mut collisions = Vec::new();
 
     for (color, path) in lines.iter().enumerate() {
-        let pcs = path.split(',')
+        let pcs = path.as_ref().split(',')
             .map(PenCommand::from_str)
             .map(Result::unwrap);
         let segments = ContinuousLineFromPen::line_segments_from(
@@ -26,18 +30,10 @@ fn stage1(lines: &[&str]) -> Option<Point<usize>> {
         }
     }
 
-    // was first thinking the manhattan distance should be to the center
-    /*
-    let bounds = canvas.bounds().clone().unwrap();
-
-    let middle = Point::from((
-        ((bounds.1.x as isize - bounds.0.x as isize) / 2 + bounds.0.x as isize) as usize,
-        ((bounds.1.y as isize - bounds.0.y as isize) / 2 + bounds.0.y as isize) as usize,
-    ));*/
-
     collisions.sort_by_key(|(_, p)| p.manhattan_distance(&central_point));
 
     collisions.first().cloned().map(|(_color, p)| p)
+        .map(|p| p.manhattan_distance(&canvas.central_port().unwrap()))
 }
 
 #[derive(Default)]
@@ -89,35 +85,6 @@ impl TwoDimensionalWorld {
         &self.first
     }
 }
-
-/*
-struct Wire<T>(Vec<LineSegment<T>>);
-
-impl<T> std::default::Default for Wire<T> {
-    fn default() -> Self {
-        Wire(vec![])
-    }
-}
-
-impl<T> Wire<T> {
-    fn begin(starting_point: &Point<T>) -> WireBuilder<T> {
-        unimplemented!();
-    }
-}
-
-struct WireBuilder<T> {
-    starting_point: Point<T>,
-    wire: Option<Wire<T>>,
-}
-
-impl<T> WireBuilder<T> {
-    fn push(self, command: PenCommand) -> Wire<T> {
-        unimplemented!()
-        /*let mut w = Wire::default();
-        w.push((self.starting_point, command.travel_from(self.starting_point)));
-        w*/
-    }
-}*/
 
 #[derive(PartialEq, Debug)]
 struct LineSegment<T>(Point<T>, Point<T>);
@@ -413,16 +380,6 @@ fn two_color_world_collisions() {
     let bounds = canvas.bounds().clone().unwrap();
 
     assert_eq!(((1, 1).into(), (9, 6).into()), bounds);
-
-    /*
-    let middle = Point::from((
-        ((bounds.1.x as isize - bounds.0.x as isize) / 2 + bounds.0.x as isize) as usize,
-        ((bounds.1.y as isize - bounds.0.y as isize) / 2 + bounds.0.y as isize) as usize,
-    ));
-
-    collisions.sort_by_key(|(_, p)| p.manhattan_distance(&middle));
-
-    assert_eq!(None, collisions.first());*/
 }
 
 #[test]
@@ -433,8 +390,7 @@ fn full_simplest_stage1_example() {
         "U7,R6,D4,L4",
     ]);
 
-    assert_eq!(Some((4, 4).into()), closest);
-    assert_eq!(6, closest.unwrap().manhattan_distance(&(1, 1).into()));
+    assert_eq!(6, closest.unwrap());
 }
 
 #[test]
@@ -445,7 +401,7 @@ fn full_stage1_example1() {
         "U62,R66,U55,R34,D71,R55,D58,R83",
     ]);
 
-    assert_eq!(159, closest.unwrap().manhattan_distance(&(1, 1).into()));
+    assert_eq!(159, closest.unwrap());
 }
 
 #[test]
@@ -456,5 +412,5 @@ fn full_stage1_example2() {
         "U98,R91,D20,R16,D67,R40,U7,R15,U6,R7",
     ]);
 
-    assert_eq!(135, closest.unwrap().manhattan_distance(&(1, 1).into()));
+    assert_eq!(135, closest.unwrap());
 }
