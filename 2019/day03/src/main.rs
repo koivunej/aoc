@@ -1,6 +1,6 @@
-use std::str::FromStr;
 use std::collections::HashMap;
 use std::io::BufRead;
+use std::str::FromStr;
 
 fn main() {
     let stdin = std::io::stdin();
@@ -14,41 +14,42 @@ fn main() {
 }
 
 fn stage1<T: AsRef<str>>(lines: &[T]) -> Option<usize> {
-
     let central_point = Point { x: 1, y: 1 };
     let mut canvas = TwoDimensionalWorld::default();
     let mut collisions = Vec::new();
 
     for (color, path) in lines.iter().enumerate() {
-        let pcs = path.as_ref().split(',')
+        let pcs = path
+            .as_ref()
+            .split(',')
             .map(PenCommand::from_str)
             .map(Result::unwrap);
-        let segments = ContinuousLineFromPen::line_segments_from(
-            central_point.clone(),
-            pcs);
+        let segments = ContinuousLineFromPen::line_segments_from(central_point.clone(), pcs);
 
         canvas.paint(segments, &color, &mut collisions);
     }
 
     collisions.sort_by_key(|(_, _, p)| p.manhattan_distance(&central_point));
 
-    collisions.first().cloned().map(|(_color, _steps, p)| p)
+    collisions
+        .first()
+        .cloned()
+        .map(|(_color, _steps, p)| p)
         .map(|p| p.manhattan_distance(&canvas.central_port().unwrap()))
 }
 
 fn stage2<T: AsRef<str>>(lines: &[T]) -> Option<usize> {
-
     let central_point = Point { x: 1, y: 1 };
     let mut canvas = TwoDimensionalWorld::default();
     let mut collisions = Vec::new();
 
     for (color, path) in lines.iter().enumerate() {
-        let pcs = path.as_ref().split(',')
+        let pcs = path
+            .as_ref()
+            .split(',')
             .map(PenCommand::from_str)
             .map(Result::unwrap);
-        let segments = ContinuousLineFromPen::line_segments_from(
-            central_point.clone(),
-            pcs);
+        let segments = ContinuousLineFromPen::line_segments_from(central_point.clone(), pcs);
 
         canvas.paint(segments, &color, &mut collisions);
     }
@@ -71,10 +72,14 @@ type Color = usize;
 
 impl TwoDimensionalWorld {
     /// The steps in collisions is the combined total steps so far to collide in that position
-    fn paint<I>(&mut self, lss: I, color: &Color, collisions: &mut Vec<(Color, Steps, Point<usize>)>)
-        where I: Iterator<Item = LineSegment<usize>>
+    fn paint<I>(
+        &mut self,
+        lss: I,
+        color: &Color,
+        collisions: &mut Vec<(Color, Steps, Point<usize>)>,
+    ) where
+        I: Iterator<Item = LineSegment<usize>>,
     {
-
         let mut last = None;
         let mut steps = 0;
 
@@ -82,14 +87,12 @@ impl TwoDimensionalWorld {
         // to implement borrowing and ownership taking iterator here
         for ls in lss {
             for p in ls.iter_including_start() {
-
                 // had a bug here with repeating values but added a test
                 // line_segment_points_should_be_unique as well
                 let (new_last, last_changed) = match last.take() {
                     Some((0, x)) if x == p => (Some((1, p.clone())), false),
                     Some((_, x)) if x == p => panic!("Too many duplicate points: {:?}", p),
-                    Some((_, _))
-                    | None => (Some((0, p.clone())), true),
+                    Some((_, _)) | None => (Some((0, p.clone())), true),
                 };
 
                 last = new_last;
@@ -105,15 +108,16 @@ impl TwoDimensionalWorld {
                         collisions.push((
                             first_color.clone(),
                             first_steps.clone() + steps.clone(),
-                            p.clone()
+                            p.clone(),
                         ));
                     }
-                    _ => {},
+                    _ => {}
                 }
 
                 self.first = self.first.or(Some(p));
 
-                self.first_color.insert(p.clone(), (color.clone(), steps.clone()));
+                self.first_color
+                    .insert(p.clone(), (color.clone(), steps.clone()));
 
                 // line segments overlap during end and start
                 steps += if last_changed { 1 } else { 0 };
@@ -162,13 +166,19 @@ impl<'a> Iterator for PointIterator<'a> {
                 let dy = end.y as isize - last.y as isize;
 
                 if dx.abs() > dy.abs() {
-                    Point { x: (last.x as isize + dx.signum()) as usize, y: last.y }
+                    Point {
+                        x: (last.x as isize + dx.signum()) as usize,
+                        y: last.y,
+                    }
                 } else if dy.abs() > dx.abs() {
-                    Point { x: last.x, y: (last.y as isize + dy.signum()) as usize }
+                    Point {
+                        x: last.x,
+                        y: (last.y as isize + dy.signum()) as usize,
+                    }
                 } else {
                     unreachable!();
                 }
-            },
+            }
             None => start.clone(),
         });
 
@@ -183,7 +193,10 @@ impl<T> From<(Point<T>, Point<T>)> for LineSegment<T> {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Default, Copy)]
-struct Point<T> { x: T, y: T }
+struct Point<T> {
+    x: T,
+    y: T,
+}
 
 impl<T> From<(T, T)> for Point<T> {
     fn from((x, y): (T, T)) -> Self {
@@ -192,7 +205,12 @@ impl<T> From<(T, T)> for Point<T> {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-enum Direction { Up, Right, Down, Left }
+enum Direction {
+    Up,
+    Right,
+    Down,
+    Left,
+}
 
 impl Direction {
     fn step(&self) -> (isize, isize) {
@@ -271,7 +289,10 @@ impl PenCommand {
 
         let (dx, dy) = (amount * dx, amount * dy);
 
-        let end = Point { x: (start.x as isize + dx) as usize, y: (start.y as isize + dy) as usize };
+        let end = Point {
+            x: (start.x as isize + dx) as usize,
+            y: (start.y as isize + dy) as usize,
+        };
 
         LineSegment(start, end)
     }
@@ -302,7 +323,7 @@ impl<I: Iterator<Item = PenCommand>> Iterator for ContinuousLineFromPen<I> {
                 let ls = pc.to_line_segment_from(self.last.clone());
                 self.last = ls.1.clone();
                 Some(ls)
-            },
+            }
             None => None,
         }
     }
@@ -317,15 +338,12 @@ trait ManhattanDistance {
 
 impl ManhattanDistance for Point<usize> {
     fn manhattan_distance(&self, to: &Self) -> usize {
-        ((to.x as isize - self.x as isize).abs()
-            + (to.y as isize - self.y as isize).abs()) as usize
+        ((to.x as isize - self.x as isize).abs() + (to.y as isize - self.y as isize).abs()) as usize
     }
 }
 
-
 #[test]
 fn pencommand_examples() {
-
     let invalid = "a".parse::<u8>().unwrap_err();
 
     let values = &[
@@ -333,7 +351,12 @@ fn pencommand_examples() {
         ("U5", Ok(PenCommand(Direction::Up, 5))),
         ("L4", Ok(PenCommand(Direction::Left, 4))),
         ("D3", Ok(PenCommand(Direction::Down, 3))),
-        ("A", Err(ParsePenCommandError::Direction(ParseDirectionError::InvalidCharacter))),
+        (
+            "A",
+            Err(ParsePenCommandError::Direction(
+                ParseDirectionError::InvalidCharacter,
+            )),
+        ),
         ("RA", Err(ParsePenCommandError::Amount(invalid))),
     ];
 
@@ -354,7 +377,7 @@ fn line_segment_points() {
         (6, 1),
         (7, 1),
         (8, 1),
-        (9, 1)
+        (9, 1),
     ];
 
     let points = PenCommand(Direction::Right, 8)
@@ -362,7 +385,14 @@ fn line_segment_points() {
         .iter()
         .collect::<Vec<Point<usize>>>();
 
-    assert_eq!(points, expected.iter().cloned().map(Point::from).collect::<Vec<Point<usize>>>());
+    assert_eq!(
+        points,
+        expected
+            .iter()
+            .cloned()
+            .map(Point::from)
+            .collect::<Vec<Point<usize>>>()
+    );
 }
 
 #[test]
@@ -374,10 +404,9 @@ fn line_segment_points_should_be_unique() {
     for p in ls.iter() {
         last = match last.take() {
             Some(x) if x == p => panic!("got duplicate point: {:?}", p),
-            Some(_)
-            | None => Some(p),
+            Some(_) | None => Some(p),
         };
-    };
+    }
 }
 
 #[test]
@@ -388,10 +417,13 @@ fn pen_full_line_example() {
         LineSegment((1, 1).into(), (9, 1).into()),
         LineSegment((9, 1).into(), (9, 6).into()),
         LineSegment((9, 6).into(), (4, 6).into()),
-        LineSegment((4, 6).into(), (4, 3).into())
+        LineSegment((4, 6).into(), (4, 3).into()),
     ];
 
-    let pcs = "R8,U5,L5,D3".split(',').map(PenCommand::from_str).map(Result::unwrap);
+    let pcs = "R8,U5,L5,D3"
+        .split(',')
+        .map(PenCommand::from_str)
+        .map(Result::unwrap);
 
     let actual = ContinuousLineFromPen::line_segments_from(start, pcs).collect::<Vec<_>>();
 
@@ -400,29 +432,21 @@ fn pen_full_line_example() {
 
 #[test]
 fn two_color_world_collisions() {
-
     let start = Point { x: 1, y: 1 };
 
-    let lines = &[
-        "R8,U5,L5,D3",
-        "U7,R6,D4,L4",
-    ];
+    let lines = &["R8,U5,L5,D3", "U7,R6,D4,L4"];
 
-    let expected = vec![
-        (0, 30, Point { x: 7, y: 6 }),
-        (0, 40, Point { x: 4, y: 4 }),
-    ];
+    let expected = vec![(0, 30, Point { x: 7, y: 6 }), (0, 40, Point { x: 4, y: 4 })];
 
     let mut canvas = TwoDimensionalWorld::default();
     let mut collisions = Vec::new();
 
     for (color, path) in lines.iter().enumerate() {
-        let pcs = path.split(',')
+        let pcs = path
+            .split(',')
             .map(PenCommand::from_str)
             .map(Result::unwrap);
-        let segments = ContinuousLineFromPen::line_segments_from(
-            start.clone(),
-            pcs);
+        let segments = ContinuousLineFromPen::line_segments_from(start.clone(), pcs);
 
         canvas.paint(segments, &color, &mut collisions);
 
@@ -436,18 +460,13 @@ fn two_color_world_collisions() {
 
 #[test]
 fn full_simplest_stage1_example() {
-
-    let closest = stage1(&[
-        "R8,U5,L5,D3",
-        "U7,R6,D4,L4",
-    ]);
+    let closest = stage1(&["R8,U5,L5,D3", "U7,R6,D4,L4"]);
 
     assert_eq!(6, closest.unwrap());
 }
 
 #[test]
 fn full_stage1_example1() {
-
     let closest = stage1(&[
         "R75,D30,R83,U83,L12,D49,R71,U7,L72",
         "U62,R66,U55,R34,D71,R55,D58,R83",
@@ -458,7 +477,6 @@ fn full_stage1_example1() {
 
 #[test]
 fn full_stage1_example2() {
-
     let closest = stage1(&[
         "R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51",
         "U98,R91,D20,R16,D67,R40,U7,R15,U6,R7",
@@ -469,17 +487,13 @@ fn full_stage1_example2() {
 
 #[test]
 fn simplest_stage2_example() {
-    let closest = stage2(&[
-        "R8,U5,L5,D3",
-        "U7,R6,D4,L4",
-    ]);
+    let closest = stage2(&["R8,U5,L5,D3", "U7,R6,D4,L4"]);
 
     assert_eq!(30, closest.unwrap());
 }
 
 #[test]
 fn full_stage2_example1() {
-
     let closest = stage2(&[
         "R75,D30,R83,U83,L12,D49,R71,U7,L72",
         "U62,R66,U55,R34,D71,R55,D58,R83",
@@ -490,7 +504,6 @@ fn full_stage2_example1() {
 
 #[test]
 fn full_stage2_example2() {
-
     let closest = stage2(&[
         "R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51",
         "U98,R91,D20,R16,D67,R40,U7,R15,U6,R7",
