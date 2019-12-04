@@ -26,7 +26,7 @@ enum Stage { One, Two }
 struct Kind {
     monotonous: bool,
     have_repeat: bool,
-    longest_repeat: u8,
+    have_repeat_of_two: bool,
 }
 
 impl Kind {
@@ -37,7 +37,7 @@ impl Kind {
     fn have_it_all(&self, stage: Stage) -> bool {
         match stage {
             Stage::One => self.monotonous && self.have_repeat,
-            Stage::Two => self.have_it_all(Stage::One) && self.longest_repeat == 2,
+            Stage::Two => self.have_it_all(Stage::One) && self.have_repeat_of_two,
         }
     }
 }
@@ -61,22 +61,20 @@ fn analyze_str(buf: &str) -> Kind {
             return ret;
         }
 
-        repeat = match (repeat.take(), left == right) {
-            (Some(count), true) => Some(count + 1),
-            (Some(count), false) => {
-                // would like to figure how to move this outside of the match
-                ret.longest_repeat = ret.longest_repeat.max(count);
-                None
-            },
-            (None, true) => Some(1),
-            (None, false) => None,
+        let (updated_repeat, have_repeat_of_two) = match (repeat.take(), left == right) {
+            (Some(count), true) => (Some(count + 1), false),
+            (Some(count), false) => (None, count == 1),
+            (None, true) => (Some(1), false),
+            (None, false) => (None, false),
         };
 
         ret.have_repeat |= left == right;
+        ret.have_repeat_of_two |= have_repeat_of_two;
+        repeat = updated_repeat;
     }
 
     if let Some(count) = repeat.take() {
-        ret.longest_repeat = ret.longest_repeat.max(count);
+        ret.have_repeat_of_two |= count == 1;
     }
 
     ret.monotonous = true;
@@ -95,6 +93,6 @@ fn stage1_examples() {
 fn stage2_examples() {
     let mut buf = String::new();
     assert!(analyze(112233, &mut buf).have_it_all(Stage::Two));
-    assert!(analyze(123444, &mut buf).have_it_all(Stage::Two));
+    assert!(!analyze(123444, &mut buf).have_it_all(Stage::Two));
     assert!(analyze(111122, &mut buf).have_it_all(Stage::Two));
 }
