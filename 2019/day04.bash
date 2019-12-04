@@ -16,7 +16,6 @@ seq "$1" "$2" \
 	| while read line; do \
 		grep -o . <<< "$line" \
 			| uniq -c \
-			| sort -nr \
 			| egrep -q '^\s+2\s' \
 			&& echo "$line"
 	done \
