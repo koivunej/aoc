@@ -1,4 +1,6 @@
+use std::cmp::Ordering;
 use std::fmt::Write;
+use std::iter::FromIterator;
 
 fn main() {
     let range = 108_457..=562_041;
@@ -11,6 +13,7 @@ fn main() {
 
 fn run_stages<I: Iterator<Item = u32>>(iter: I) -> (usize, usize) {
     let mut buf = String::with_capacity(6);
+
     iter.map(move |guess| analyze(guess, &mut buf))
         .filter(|k| k.have_any_of_it())
         .fold((0, 0), |mut counts, next| {
@@ -46,9 +49,6 @@ impl Analyzed {
         }
     }
 }
-
-use std::cmp::Ordering;
-use std::iter::FromIterator;
 
 impl FromIterator<Ordering> for Analyzed {
     fn from_iter<I: IntoIterator<Item = Ordering>>(iter: I) -> Self {
