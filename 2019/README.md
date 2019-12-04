@@ -8,3 +8,5 @@ Day1: I had never used the stabilized `std::convert::TryFrom` before
 Day2: Nothing special, tried out `go`... Got my source code file overwritten by the compiler.
 
 Day3: Iterator training, deep error propagation, generic `Point<T>`... Suprised I passed in the end.
+
+Day4: Failed to try out anything, there were no complications. Possible optimizations yes but I am not interested in those.
