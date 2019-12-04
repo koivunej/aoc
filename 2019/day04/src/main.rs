@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 fn main() {
-    let range = 108457..=562041;
+    let range = 108_457..=562_041;
     let mut buf = String::with_capacity(6);
 
     let (stage1, stage2) = range.map(move |guess| analyze(guess, &mut buf))
