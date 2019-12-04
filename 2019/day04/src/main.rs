@@ -2,10 +2,16 @@ use std::fmt::Write;
 
 fn main() {
     let range = 108_457..=562_041;
-    let mut buf = String::with_capacity(6);
 
-    let (stage1, stage2) = range
-        .map(move |guess| analyze(guess, &mut buf))
+    let (stage1, stage2) = run_stages(range);
+
+    println!("stage1: {}", stage1);
+    println!("stage2: {}", stage2);
+}
+
+fn run_stages<I: Iterator<Item = u32>>(iter: I) -> (usize, usize) {
+    let mut buf = String::with_capacity(6);
+    iter.map(move |guess| analyze(guess, &mut buf))
         .filter(|k| k.have_any_of_it())
         .fold((0, 0), |mut counts, next| {
             if next.have_it_all(Stage::Two) {
@@ -13,10 +19,7 @@ fn main() {
             }
             counts.0 += 1;
             counts
-        });
-
-    println!("stage1: {}", stage1);
-    println!("stage2: {}", stage2);
+        })
 }
 
 enum Stage {
@@ -25,13 +28,13 @@ enum Stage {
 }
 
 #[derive(Default, PartialEq, Debug)]
-struct Kind {
+struct Analyzed {
     monotonous: bool,
     have_repeat: bool,
     have_repeat_of_two: bool,
 }
 
-impl Kind {
+impl Analyzed {
     fn have_any_of_it(&self) -> bool {
         self.have_it_all(Stage::One)
     }
@@ -44,42 +47,50 @@ impl Kind {
     }
 }
 
-fn analyze(guess: u32, buf: &mut String) -> Kind {
-    buf.clear();
-    write!(buf, "{}", guess).unwrap();
-    analyze_str(&buf)
-}
+use std::cmp::Ordering;
+use std::iter::FromIterator;
 
-fn analyze_str(buf: &str) -> Kind {
-    let mut ret = Kind::default();
-    let mut repeat = None;
+impl FromIterator<Ordering> for Analyzed {
+    fn from_iter<I: IntoIterator<Item = Ordering>>(iter: I) -> Self {
+        use std::iter::repeat;
 
-    for window in buf.as_bytes().windows(2) {
-        let left = window[0] as u8 - b'0';
-        let right = window[1] as u8 - b'0';
+        let mut repeats = 0;
+        let mut have_repeat_of_two = false;
+        let mut max_repeat = 0;
 
-        if left > right {
-            return ret;
+        // chain the most neutral element (Less) to "flush" accumulated state
+        // to avoid repeating it after the loop
+        let chained = iter.into_iter().chain(repeat(Ordering::Less).take(1));
+
+        for pair_ordering in chained {
+            match pair_ordering {
+                Ordering::Greater => return Analyzed::default(),
+                Ordering::Less => {
+                    max_repeat = max_repeat.max(repeats);
+                    have_repeat_of_two |= repeats == 1;
+                    repeats = 0;
+                }
+                Ordering::Equal => {
+                    repeats += 1;
+                }
+            }
         }
 
-        let (updated_repeat, have_repeat_of_two) = match (repeat.take(), left == right) {
-            (Some(count), true) => (Some(count + 1), false),
-            (Some(count), false) => (None, count == 1),
-            (None, true) => (Some(1), false),
-            (None, false) => (None, false),
-        };
-
-        ret.have_repeat |= left == right;
-        ret.have_repeat_of_two |= have_repeat_of_two;
-        repeat = updated_repeat;
+        Analyzed {
+            monotonous: true,
+            have_repeat: max_repeat > 0,
+            have_repeat_of_two,
+        }
     }
+}
 
-    if let Some(count) = repeat.take() {
-        ret.have_repeat_of_two |= count == 1;
-    }
-
-    ret.monotonous = true;
-    ret
+fn analyze(guess: u32, buf: &mut String) -> Analyzed {
+    buf.clear();
+    write!(buf, "{}", guess).unwrap();
+    buf.as_bytes()
+        .windows(2)
+        .map(|bytes| bytes[0].cmp(&bytes[1]))
+        .collect()
 }
 
 #[test]
@@ -96,4 +107,9 @@ fn stage2_examples() {
     assert!(analyze(112233, &mut buf).have_it_all(Stage::Two));
     assert!(!analyze(123444, &mut buf).have_it_all(Stage::Two));
     assert!(analyze(111122, &mut buf).have_it_all(Stage::Two));
+}
+
+#[test]
+fn answers() {
+    assert_eq!(run_stages(108_457..=562_041), (2779, 1972));
 }
