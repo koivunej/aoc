@@ -1,9 +1,14 @@
 use std::cmp::Ordering;
-use std::fmt::Write;
 use std::iter::FromIterator;
 
+use std::env;
+
 fn main() {
-    let range = 108_457..=562_041;
+    let range = if env::args().skip(1).take(1).map(|s| s == "perf").next().unwrap_or(false) {
+        100_000..=999_999
+    } else {
+        108_457..=562_041
+    };
 
     let (stage1, stage2) = run_stages(range);
 
@@ -84,9 +89,10 @@ impl FromIterator<Ordering> for Analyzed {
     }
 }
 
-fn analyze(guess: u32, buf: &mut String) -> Analyzed {
+fn analyze(guess: u32, mut buf: &mut String) -> Analyzed {
     buf.clear();
-    write!(buf, "{}", guess).unwrap();
+    // itoa builds are quite faster: 14ms vs 25..40ms
+    itoa::fmt(&mut buf, guess).unwrap();
     buf.as_bytes()
         .windows(2)
         .map(|bytes| bytes[0].cmp(&bytes[1]))
