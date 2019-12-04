@@ -4,8 +4,6 @@ fn main() {
     let range = 108457..=562041;
     let mut buf = String::with_capacity(6);
 
-    // n_(-1) <= n
-
     let (stage1, stage2) = range.map(move |guess| analyze(guess, &mut buf))
         .filter(|k| k.have_any_of_it())
         .fold((0, 0), |mut counts, next| {
