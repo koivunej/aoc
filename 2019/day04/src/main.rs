@@ -4,7 +4,8 @@ fn main() {
     let range = 108_457..=562_041;
     let mut buf = String::with_capacity(6);
 
-    let (stage1, stage2) = range.map(move |guess| analyze(guess, &mut buf))
+    let (stage1, stage2) = range
+        .map(move |guess| analyze(guess, &mut buf))
         .filter(|k| k.have_any_of_it())
         .fold((0, 0), |mut counts, next| {
             if next.have_it_all(Stage::Two) {
@@ -18,7 +19,10 @@ fn main() {
     println!("stage2: {}", stage2);
 }
 
-enum Stage { One, Two }
+enum Stage {
+    One,
+    Two,
+}
 
 #[derive(Default, PartialEq, Debug)]
 struct Kind {
@@ -47,7 +51,6 @@ fn analyze(guess: u32, buf: &mut String) -> Kind {
 }
 
 fn analyze_str(buf: &str) -> Kind {
-
     let mut ret = Kind::default();
     let mut repeat = None;
 
