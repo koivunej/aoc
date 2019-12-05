@@ -1,7 +1,10 @@
 use std::convert::TryFrom;
 
-enum OpCode {
+#[derive(Debug)]
+pub enum OpCode {
     BinOp(BinOp),
+    Store,
+    Print,
     Halt,
 }
 
@@ -9,13 +12,15 @@ impl OpCode {
     fn len(&self) -> usize {
         match *self {
             OpCode::BinOp(_) => 4,
+            OpCode::Store => 3,
+            OpCode::Print => 2,
             OpCode::Halt => 1,
         }
     }
 }
 
 #[derive(Debug)]
-enum BinOp {
+pub enum BinOp {
     Add,
     Mul,
 }
@@ -29,7 +34,8 @@ impl BinOp {
     }
 }
 
-struct UnknownOpCode(isize);
+#[doc(hidden)]
+pub struct UnknownOpCode(isize);
 
 impl TryFrom<isize> for OpCode {
     type Error = UnknownOpCode;
@@ -37,6 +43,8 @@ impl TryFrom<isize> for OpCode {
         Ok(match u {
             1 => OpCode::BinOp(BinOp::Add),
             2 => OpCode::BinOp(BinOp::Mul),
+            3 => OpCode::Store,
+            4 => OpCode::Print,
             99 => OpCode::Halt,
             x => { return Err(UnknownOpCode(x)); },
         })
@@ -49,9 +57,19 @@ pub struct InvalidProgram {
     pub error: ProgramError,
 }
 
+impl InvalidProgram {
+    fn unsupported(instruction_pointer: usize, o: OpCode) -> Self {
+        Self {
+            instruction_pointer,
+            error: ProgramError::Unsupported(o),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ProgramError {
     UnknownOpCode(isize),
+    Unsupported(OpCode),
 }
 
 impl From<(usize, UnknownOpCode)> for InvalidProgram {
@@ -77,6 +95,16 @@ impl Config {
         match (op, self.allow_op3, self.allow_op4) {
             (Ok(x @ OpCode::Halt), _, _)
             | (Ok(x @ OpCode::BinOp(_)), _, _) => Ok(x),
+
+            (Ok(x @ OpCode::Store), allow, _)
+            | (Ok(x @ OpCode::Print), _, allow) => {
+                if allow {
+                    Ok(x)
+                } else {
+                    Err(InvalidProgram::unsupported(ip, x))
+                }
+            },
+
             (Err(e), _, _) => Err((ip, e).into()),
         }
     }
@@ -120,6 +148,7 @@ impl<'a> Program<'a> {
 
                     OpCode::BinOp(b).len()
                 },
+                x => unimplemented!("{:?}", x),
             };
 
             ip = (ip + skipped) % self.prog.len();
