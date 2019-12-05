@@ -53,6 +53,10 @@ impl TryFrom<isize> for OpCode {
             2 => OpCode::BinOp(BinOp::Mul),
             3 => OpCode::Store,
             4 => OpCode::Print,
+            5 => OpCode::Jump(UnaryCondition::OnTrue),
+            6 => OpCode::Jump(UnaryCondition::OnFalse),
+            7 => OpCode::StoreCompared(BinaryCondition::OnLessThan),
+            8 => OpCode::StoreCompared(BinaryCondition::OnEq),
             99 => OpCode::Halt,
             x => { return Err(UnknownOpCode(x)); },
         })
@@ -449,7 +453,7 @@ pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<isize>, Parsin
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
-    use super::{Program, Config, Environment, OpCode, BinOp, ParameterModes, ParameterMode};
+    use super::{Program, Config, Environment, OpCode, BinOp, ParameterModes, ParameterMode, parse_program};
 
     #[test]
     fn stage1_example() {
@@ -498,4 +502,84 @@ mod tests {
         assert_eq!(pm.mode(1), &ParameterMode::Immediate);
         assert_eq!(pm.mode(2), &ParameterMode::Address);
     }
+
+    #[test]
+    fn day05_stage2_eq_ne_example() {
+        let data = &[3,9,8,9,10,9,4,9,99,-1,8];
+        assert_eq!(day05_stage2_example_scenario(data, 8), 1);
+        assert_eq!(day05_stage2_example_scenario(data, 7), 0);
+    }
+
+    #[test]
+    fn day05_stage2_lt_example() {
+        let data = &[3,9,7,9,10,9,4,9,99,-1,8];
+        assert_eq!(day05_stage2_example_scenario(data, 7), 1);
+        assert_eq!(day05_stage2_example_scenario(data, 8), 0);
+    }
+
+    #[test]
+    fn day05_stage2_eq_ne_example_immediate() {
+        let data = &[3,3,1108,-1,8,3,4,3,99];
+        assert_eq!(day05_stage2_example_scenario(data, 8), 1);
+        assert_eq!(day05_stage2_example_scenario(data, 7), 0);
+    }
+
+    #[test]
+    fn day05_stage2_lt_example_immediate() {
+        let data = &[3,3,1107,-1,8,3,4,3,99];
+        assert_eq!(day05_stage2_example_scenario(data, 7), 1);
+        assert_eq!(day05_stage2_example_scenario(data, 8), 0);
+    }
+
+    #[test]
+    fn day05_stage2_input_eq_0() {
+        let addressed = &[3,12,6,12,15,1,13,14,13,4,13,99,-1,0,1,9];
+        let immediate = &[3,3,1105,-1,9,1101,0,0,12,4,12,99,1];
+        for code in &[&addressed[..], &immediate[..]] {
+            assert_eq!(day05_stage2_example_scenario(code, 0), 0);
+            assert_eq!(day05_stage2_example_scenario(code, 2), 1);
+        }
+    }
+
+    fn day05_stage2_example_scenario(data: &[isize], input: isize) -> isize {
+        let mut prog = data.to_vec();
+        let mut env = Environment::once(Some(input));
+        let conf = Config::day05();
+
+        Program::wrap_and_eval_with_env(&mut prog, &mut env, &conf).unwrap();
+
+        let (input, output) = env.unwrap_once();
+        assert_eq!(input, None);
+        output.unwrap()
+    }
+
+    #[test]
+    fn day05_stage2_larger_example() {
+        let code = &[
+            3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,
+            1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,
+            999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99
+        ];
+
+        // careful exploration of the whole state space :)
+        let params = &[
+            (6, 999),
+            (7, 999),
+            (8, 1000),
+            (9, 1001),
+            (10, 1001),
+        ];
+
+        for (input, expected) in params {
+            let mut prog = code.to_vec();
+            let mut env = Environment::collector(Some(*input));
+            let conf = Config::day05();
+
+            Program::wrap_and_eval_with_env(&mut prog, &mut env, &conf).unwrap();
+
+            let output = env.unwrap_collected();
+            assert_eq!(&output[..], &[*expected]);
+        }
+    }
+
 }
