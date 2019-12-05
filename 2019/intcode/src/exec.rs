@@ -76,14 +76,15 @@ impl<'a> Program<'a> {
     }
 
     fn step(&mut self, ip: usize) -> Result<State, InvalidProgram> {
-        self.decode(ip)
+        self.mem.get(ip)
+            .ok_or_else(|| ProgramError::InvalidReadAddress(ip as isize))
+            .and_then(|value| self.decode(*value))
             .and_then(|op| self.exec(ip, op))
             .map_err(|e| e.at(ip))
     }
 
-    fn decode(&self, ip: usize) -> Result<Operation, ProgramError> {
-        Operation::try_from(self.mem[ip])
-            .map_err(ProgramError::from)
+    fn decode(&self, value: isize) -> Result<Operation, ProgramError> {
+        Ok(Operation::try_from(value)?)
     }
 
     fn eval(&mut self) -> Result<usize, InvalidProgram> {
