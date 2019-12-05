@@ -1,7 +1,7 @@
 use std::io::BufRead;
 use std::str::FromStr;
 
-use intcode::Program;
+use intcode::{Program, Config};
 
 fn main() {
     let stdin = std::io::stdin();
@@ -41,7 +41,8 @@ fn stage1(data: &[isize]) -> isize {
     data[1] = 12;
     data[2] = 2;
 
-    Program::wrap_and_eval(&mut data);
+    Program::wrap_and_eval(&mut data, &Config::default())
+        .expect("Invalid program");
     data[0]
 }
 
@@ -93,7 +94,8 @@ fn find_coords(input: &[isize], magic: isize) -> Option<(isize, isize)> {
             copy[1] = i;
             copy[2] = j;
 
-            Program::wrap_and_eval(&mut copy);
+            Program::wrap_and_eval(&mut copy, &Config::default())
+                .expect("Failed to execute program");
 
             if copy[0] == magic {
                 return Some((i, j));

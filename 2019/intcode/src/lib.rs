@@ -29,7 +29,7 @@ impl BinOp {
     }
 }
 
-pub struct UnknownOpCode(isize);
+struct UnknownOpCode(isize);
 
 impl TryFrom<isize> for OpCode {
     type Error = UnknownOpCode;
@@ -40,6 +40,45 @@ impl TryFrom<isize> for OpCode {
             99 => OpCode::Halt,
             x => { return Err(UnknownOpCode(x)); },
         })
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidProgram {
+    pub instruction_pointer: usize,
+    pub error: ProgramError,
+}
+
+#[derive(Debug)]
+pub enum ProgramError {
+    UnknownOpCode(isize),
+}
+
+impl From<(usize, UnknownOpCode)> for InvalidProgram {
+    fn from((instruction_pointer, u): (usize, UnknownOpCode)) -> Self {
+        let UnknownOpCode(op) = u;
+        let error = ProgramError::UnknownOpCode(op);
+        InvalidProgram {
+            instruction_pointer,
+            error
+        }
+    }
+}
+
+/// Configuration for the virtual machine; default will provide the minimum required.
+#[derive(Default)]
+pub struct Config {
+    allow_op3: bool,
+    allow_op4: bool,
+}
+
+impl Config {
+    fn validate(&self, ip: usize, op: Result<OpCode, UnknownOpCode>) -> Result<OpCode, InvalidProgram> {
+        match (op, self.allow_op3, self.allow_op4) {
+            (Ok(x @ OpCode::Halt), _, _)
+            | (Ok(x @ OpCode::BinOp(_)), _, _) => Ok(x),
+            (Err(e), _, _) => Err((ip, e).into()),
+        }
     }
 }
 
@@ -64,12 +103,14 @@ impl<'a> Program<'a> {
         self.prog[addr as usize] = value;
     }
 
-    fn eval(&mut self) {
+    fn eval(&mut self, config: &Config) -> Result<usize, InvalidProgram> {
         let mut ip = 0;
         loop {
-            let skipped = match OpCode::try_from(self.prog[ip]) {
-                Ok(OpCode::Halt) => return,
-                Ok(OpCode::BinOp(b)) => {
+            let next = OpCode::try_from(self.prog[ip]);
+            let next = config.validate(ip, next)?;
+            let skipped = match next {
+                OpCode::Halt => return Ok(ip),
+                OpCode::BinOp(b) => {
 
                     let res = b.eval(
                         self.indirect_value(ip + 1),
@@ -79,18 +120,16 @@ impl<'a> Program<'a> {
 
                     OpCode::BinOp(b).len()
                 },
-                Err(_) => {
-                    panic!("Invalid opcode at {}: {}", ip, self.prog[ip]);
-                }
             };
 
             ip = (ip + skipped) % self.prog.len();
         }
     }
 
-    pub fn wrap_and_eval(data: &mut [isize]) {
+    /// Returns Ok(instruction_pointer) for the halt instruction
+    pub fn wrap_and_eval(data: &mut [isize], config: &Config) -> Result<usize, InvalidProgram> {
         let mut p = Program { prog: data };
-        p.eval();
+        p.eval(config)
     }
 }
 
