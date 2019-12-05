@@ -84,7 +84,7 @@ fn full_stage2() {
 }
 
 #[cfg(test)]
-fn with_day02_input<V, F: FnOnce(&[isize]) -> V>(f: F) -> V {
+fn with_input<V, F: FnOnce(&[isize]) -> V>(f: F) -> V {
     use std::io::BufReader;
 
     let file = std::fs::File::open("input")
