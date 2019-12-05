@@ -317,16 +317,18 @@ impl Environment {
 }
 
 pub struct Program<'a> {
-    prog: &'a mut [isize],
+    mem: &'a mut [isize],
+    env: &'a mut Environment,
+    config: &'a Config,
 }
 
 impl<'a> Program<'a> {
-    fn eval(&mut self, env: &mut Environment, config: &Config) -> Result<usize, InvalidProgram> {
+    fn eval(&mut self) -> Result<usize, InvalidProgram> {
         let mut ip = 0;
         loop {
-            let op = self.prog[ip];
+            let op = self.mem[ip];
             let next = OpCode::try_from(op);
-            let next = config.validate(op, ip, next)?;
+            let next = self.config.validate(op, ip, next)?;
 
             let jump_target = match next {
                 OpCode::Halt => return Ok(ip),
@@ -338,11 +340,10 @@ impl<'a> Program<'a> {
                     let third = pvs.mode(2);
 
                     let res = b.eval(
-                        first.eval(self.prog[ip + 1], &self.prog),
-                        second.eval(self.prog[ip + 2], &self.prog),
-                    );
+                        first.eval(self.mem[ip + 1], &self.mem),
+                        second.eval(self.mem[ip + 2], &self.mem));
 
-                    third.store(res, self.prog[ip + 3], &mut self.prog);
+                    third.store(res, self.mem[ip + 3], &mut self.mem);
 
                     ip + 4
                 }
@@ -352,8 +353,8 @@ impl<'a> Program<'a> {
                         .all_must_equal_default();
 
                     let target = pvs.mode(0);
-                    let input = env.input(ip)?;
-                    target.store(input, self.prog[ip + 1], &mut self.prog);
+                    let input = self.env.input(ip)?;
+                    target.store(input, self.mem[ip + 1], &mut self.mem);
 
                     ip + 2
                 }
@@ -361,15 +362,15 @@ impl<'a> Program<'a> {
                     let pvs = ParameterModes::for_op(op, 1);
 
                     let source = pvs.mode(0);
-                    env.output(ip, source.eval(self.prog[ip + 1], &self.prog))?;
+                    self.env.output(ip, source.eval(self.mem[ip + 1], &self.mem))?;
 
                     ip + 2
                 }
                 OpCode::Jump(cond) => {
                     let pvs = ParameterModes::for_op(op, 2);
 
-                    let cmp = pvs.mode(0).eval(self.prog[ip + 1], &self.prog);
-                    let target = pvs.mode(1).eval(self.prog[ip + 2], &self.prog);
+                    let cmp = pvs.mode(0).eval(self.mem[ip + 1], &self.mem);
+                    let target = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
 
                     if cond.eval(cmp) {
                         target as usize
@@ -380,12 +381,12 @@ impl<'a> Program<'a> {
                 OpCode::StoreCompared(bincond) => {
                     let pvs = ParameterModes::for_op(op, 3);
 
-                    let first = pvs.mode(0).eval(self.prog[ip + 1], &self.prog);
-                    let second = pvs.mode(1).eval(self.prog[ip + 2], &self.prog);
+                    let first = pvs.mode(0).eval(self.mem[ip + 1], &self.mem);
+                    let second = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
                     let target = pvs.mode(2);
 
                     let res = if bincond.eval(first, second) { 1 } else { 0 };
-                    target.store(res, self.prog[ip + 3], &mut self.prog);
+                    target.store(res, self.mem[ip + 3], &mut self.mem);
 
                     ip + 4
                 }
@@ -405,8 +406,8 @@ impl<'a> Program<'a> {
         env: &mut Environment,
         config: &Config,
     ) -> Result<usize, InvalidProgram> {
-        let mut p = Program { prog: data };
-        p.eval(env, config)
+        let mut p = Program { mem: data, env, config };
+        p.eval()
     }
 }
 
