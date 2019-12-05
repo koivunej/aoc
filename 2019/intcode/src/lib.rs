@@ -148,8 +148,8 @@ enum ParameterMode {
 }
 
 impl ParameterMode {
-    fn eval(&self, arg: isize, program: &[isize]) -> isize {
-        match *self {
+    fn eval(self, arg: isize, program: &[isize]) -> isize {
+        match self {
             ParameterMode::Address => {
                 assert!(arg >= 0);
                 program[arg as usize]
@@ -158,8 +158,8 @@ impl ParameterMode {
         }
     }
 
-    fn store(&self, value: isize, arg: isize, program: &mut [isize]) {
-        match *self {
+    fn store(self, value: isize, arg: isize, program: &mut [isize]) {
+        match self {
             ParameterMode::Address => {
                 assert!(arg >= 0);
                 program[arg as usize] = value;
@@ -188,15 +188,6 @@ impl BinOp {
 pub struct InvalidProgram {
     pub instruction_pointer: usize,
     pub error: ProgramError,
-}
-
-impl InvalidProgram {
-    fn unsupported(instruction_pointer: usize, o: OpCode) -> Self {
-        Self {
-            instruction_pointer,
-            error: ProgramError::Unsupported(o),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -237,7 +228,6 @@ impl Config {
     pub fn day05() -> Self {
         Config {
             parameter_modes: true,
-            ..Self::default()
         }
     }
 
@@ -290,7 +280,10 @@ impl Environment {
                     Ok(())
                 }
             }
-            Environment::Collector(_, ref mut collected) => Ok(collected.push(value)),
+            Environment::Collector(_, ref mut collected) => {
+                collected.push(value);
+                Ok(())
+            },
         }
     }
 
@@ -462,7 +455,7 @@ pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<isize>, Parsin
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_program, BinOp, Config, Environment, OpCode, ParameterMode, ParameterModes, Program,
+        BinOp, Config, Environment, OpCode, ParameterMode, ParameterModes, Program,
     };
     use std::convert::TryFrom;
 
