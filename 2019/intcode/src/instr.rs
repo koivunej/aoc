@@ -254,3 +254,22 @@ impl BinOp {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryFrom;
+    use super::{BinOp, OpCode, ParameterMode, ParameterModes};
+
+    #[test]
+    fn parse_opcode_with_modes() {
+        let input = 1002;
+
+        assert_eq!(OpCode::try_from(input).unwrap(), OpCode::BinOp(BinOp::Mul));
+
+        let pm = ParameterModes::try_from(input).unwrap();
+        assert_eq!(pm.mode(0), &ParameterMode::Address);
+        assert_eq!(pm.mode(1), &ParameterMode::Immediate);
+        assert_eq!(pm.mode(2), &ParameterMode::Address);
+    }
+
+}
