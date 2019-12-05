@@ -111,6 +111,12 @@ impl TryFrom<isize> for ParameterModes {
 static DEFAULT_PARAMETER_MODE: ParameterMode = ParameterMode::Address;
 
 impl ParameterModes {
+    fn for_op(op: isize, amount: usize) -> Self {
+        Self::try_from(op)
+            .expect("Failed to deduce parameter modes")
+            .at_most(amount)
+    }
+
     fn mode(&self, index: usize) -> &ParameterMode {
         self.modes.get(index).unwrap_or(&DEFAULT_PARAMETER_MODE)
     }
@@ -325,9 +331,7 @@ impl<'a> Program<'a> {
             let jump_target = match next {
                 OpCode::Halt => return Ok(ip),
                 OpCode::BinOp(b) => {
-                    let pvs = ParameterModes::try_from(op)
-                        .expect("Failed to deduce parameter modes")
-                        .at_most(3);
+                    let pvs = ParameterModes::for_op(op, 3);
 
                     let first = pvs.mode(0);
                     let second = pvs.mode(1);
@@ -344,10 +348,8 @@ impl<'a> Program<'a> {
                 }
                 OpCode::Store => {
                     // this cannot have parameter modes...
-                    let pvs = ParameterModes::try_from(op)
-                        .expect("Failed to deduce parameter modes")
-                        .all_must_equal_default()
-                        .at_most(1);
+                    let pvs = ParameterModes::for_op(op, 1)
+                        .all_must_equal_default();
 
                     let target = pvs.mode(0);
                     let input = env.input(ip)?;
@@ -356,9 +358,7 @@ impl<'a> Program<'a> {
                     ip + 2
                 }
                 OpCode::Print => {
-                    let pvs = ParameterModes::try_from(op)
-                        .expect("Failed to deduce parameter modes")
-                        .at_most(1);
+                    let pvs = ParameterModes::for_op(op, 1);
 
                     let source = pvs.mode(0);
                     env.output(ip, source.eval(self.prog[ip + 1], &self.prog))?;
@@ -366,9 +366,7 @@ impl<'a> Program<'a> {
                     ip + 2
                 }
                 OpCode::Jump(cond) => {
-                    let pvs = ParameterModes::try_from(op)
-                        .expect("Failed to deduce parameter modes")
-                        .at_most(2);
+                    let pvs = ParameterModes::for_op(op, 2);
 
                     let cmp = pvs.mode(0).eval(self.prog[ip + 1], &self.prog);
                     let target = pvs.mode(1).eval(self.prog[ip + 2], &self.prog);
@@ -380,9 +378,7 @@ impl<'a> Program<'a> {
                     }
                 }
                 OpCode::StoreCompared(bincond) => {
-                    let pvs = ParameterModes::try_from(op)
-                        .expect("Failed to deduce parameter modes")
-                        .at_most(3);
+                    let pvs = ParameterModes::for_op(op, 3);
 
                     let first = pvs.mode(0).eval(self.prog[ip + 1], &self.prog);
                     let second = pvs.mode(1).eval(self.prog[ip + 2], &self.prog);
