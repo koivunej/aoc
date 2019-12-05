@@ -121,7 +121,7 @@ impl TryFrom<isize> for ParameterModes {
 }
 
 #[derive(Debug)]
-pub struct Operation(OpCode, ParameterModes, isize);
+pub struct Operation(OpCode, ParameterModes);
 
 #[derive(Debug)]
 pub enum DecodingError {
@@ -149,7 +149,7 @@ impl TryFrom<isize> for Operation {
                 .map_err(|_| DecodingError::InvalidParameterMode(raw))?;
         }
 
-        Ok(Operation(op, pvs, raw))
+        Ok(Operation(op, pvs))
     }
 }
 
@@ -356,7 +356,7 @@ enum State {
 
 impl<'a> Program<'a> {
     fn step(&mut self, ip: usize) -> Result<State, InvalidProgram> {
-        let Operation(op, pvs, _) = self.decode(ip)?;
+        let Operation(op, pvs) = self.decode(ip)?;
 
         let ip = match op {
             OpCode::Halt => return Ok(State::HaltedAt(ip)),
