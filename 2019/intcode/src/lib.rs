@@ -207,7 +207,7 @@ impl<'a> Program<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::Program;
+    use super::{Program, Config};
 
     #[test]
     fn stage1_example() {
@@ -223,7 +223,7 @@ mod tests {
             99,
             30, 40, 50];
 
-        Program::wrap_and_eval(&mut prog);
+        Program::wrap_and_eval(&mut prog, &Config::default());
 
         assert_eq!(&prog[..], expected);
     }
