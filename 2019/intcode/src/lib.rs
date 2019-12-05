@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use smallvec::SmallVec;
 
 #[derive(Debug)]
 pub enum OpCode {
@@ -6,6 +7,74 @@ pub enum OpCode {
     Store,
     Print,
     Halt,
+}
+
+#[doc(hidden)]
+pub struct UnknownOpCode(isize);
+
+impl TryFrom<isize> for OpCode {
+    type Error = UnknownOpCode;
+    fn try_from(u: isize) -> Result<Self, Self::Error> {
+        Ok(match u {
+            1 => OpCode::BinOp(BinOp::Add),
+            2 => OpCode::BinOp(BinOp::Mul),
+            3 => OpCode::Store,
+            4 => OpCode::Print,
+            99 => OpCode::Halt,
+            x => { return Err(UnknownOpCode(x)); },
+        })
+    }
+}
+
+struct ParameterModes {
+    modes: SmallVec<[ParameterMode; 4]>,
+}
+
+impl TryFrom<isize> for ParameterModes {
+    type Error = ();
+
+    fn try_from(data: isize) -> Result<ParameterModes, Self::Error> {
+        if data < 100 {
+            Ok(ParameterModes { modes: SmallVec::new() })
+        } else {
+            unimplemented!();
+        }
+    }
+}
+
+static DEFAULT_PARAMETER_MODE: ParameterMode = ParameterMode::Address;
+
+impl ParameterModes {
+    fn mode(&self, index: usize) -> &ParameterMode {
+        self.modes.get(index).unwrap_or(&DEFAULT_PARAMETER_MODE)
+    }
+}
+
+enum ParameterMode {
+    Address,
+    Immediate
+}
+
+impl ParameterMode {
+    fn eval(&self, arg: isize, program: &[isize]) -> isize {
+        match *self {
+            ParameterMode::Address => {
+                assert!(arg >= 0);
+                program[arg as usize]
+            },
+            ParameterMode::Immediate => arg,
+        }
+    }
+
+    fn store(&self, value: isize, arg: isize, program: &mut [isize]) {
+        match *self {
+            ParameterMode::Address => {
+                assert!(arg >= 0);
+                program[arg as usize] = value;
+            },
+            ParameterMode::Immediate => panic!("Cannot store on immediate"),
+        }
+    }
 }
 
 impl OpCode {
@@ -31,23 +100,6 @@ impl BinOp {
             BinOp::Add => lhs.checked_add(rhs).expect("Add overflow"),
             BinOp::Mul => lhs.checked_mul(rhs).expect("Mul overflow"),
         }
-    }
-}
-
-#[doc(hidden)]
-pub struct UnknownOpCode(isize);
-
-impl TryFrom<isize> for OpCode {
-    type Error = UnknownOpCode;
-    fn try_from(u: isize) -> Result<Self, Self::Error> {
-        Ok(match u {
-            1 => OpCode::BinOp(BinOp::Add),
-            2 => OpCode::BinOp(BinOp::Mul),
-            3 => OpCode::Store,
-            4 => OpCode::Print,
-            99 => OpCode::Halt,
-            x => { return Err(UnknownOpCode(x)); },
-        })
     }
 }
 
@@ -115,22 +167,6 @@ pub struct Program<'a> {
 }
 
 impl<'a> Program<'a> {
-    fn indirect_value(&self, index: usize) -> isize {
-        let index = index % self.prog.len();
-        let addr = self.prog[index];
-        assert!(addr >= 0);
-        let val = self.prog[addr as usize];
-        val
-    }
-
-    fn indirect_store(&mut self, index: usize, value: isize) {
-        let index = index % self.prog.len();
-        let addr = self.prog[index];
-        assert!(addr >= 0);
-        // probably shouldn't panic?
-        self.prog[addr as usize] = value;
-    }
-
     fn eval(&mut self, config: &Config) -> Result<usize, InvalidProgram> {
         let mut ip = 0;
         loop {
@@ -140,11 +176,18 @@ impl<'a> Program<'a> {
                 OpCode::Halt => return Ok(ip),
                 OpCode::BinOp(b) => {
 
-                    let res = b.eval(
-                        self.indirect_value(ip + 1),
-                        self.indirect_value(ip + 2));
+                    let pvs = ParameterModes::try_from(self.prog[ip])
+                        .expect("Failed to deduce parameter modes");
 
-                    self.indirect_store(ip + 3, res);
+                    let first = pvs.mode(0);
+                    let second = pvs.mode(1);
+                    let third = pvs.mode(2);
+
+                    let res = b.eval(
+                        first.eval(self.prog[ip + 1], &self.prog),
+                        second.eval(self.prog[ip + 2], &self.prog));
+
+                    third.store(res, self.prog[ip + 3], &mut self.prog);
 
                     OpCode::BinOp(b).len()
                 },
