@@ -1,4 +1,4 @@
-use intcode::{parse_program, Config, ParsingError, Program};
+use intcode::{parse_program, ParsingError, Program};
 
 fn main() {
     let stdin = std::io::stdin();
@@ -42,7 +42,7 @@ fn stage1(data: &[isize]) -> isize {
     data[1] = 12;
     data[2] = 2;
 
-    Program::wrap_and_eval(&mut data, &Config::default()).expect("Invalid program");
+    Program::wrap_and_eval(&mut data).expect("Invalid program");
     data[0]
 }
 
@@ -54,7 +54,7 @@ fn find_coords(input: &[isize], magic: isize) -> Option<(isize, isize)> {
             copy[1] = i;
             copy[2] = j;
 
-            Program::wrap_and_eval(&mut copy, &Config::default())
+            Program::wrap_and_eval(&mut copy)
                 .expect("Failed to execute program");
 
             if copy[0] == magic {

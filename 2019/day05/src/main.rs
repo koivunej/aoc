@@ -1,4 +1,4 @@
-use intcode::{parse_program, Config, Environment, ParsingError, Program};
+use intcode::{parse_program, Environment, ParsingError, Program};
 
 fn main() {
     let stdin = std::io::stdin();
@@ -24,7 +24,7 @@ fn stage1(data: &[isize]) -> isize {
     let mut data = data.to_vec();
     let mut env = Environment::collector(Some(1));
 
-    Program::wrap_and_eval_with_env(data.as_mut_slice(), &mut env, &Config::day05()).unwrap();
+    Program::wrap_and_eval_with_env(data.as_mut_slice(), &mut env).unwrap();
 
     let output = env.unwrap_collected();
     *output.last().expect("No output?")
@@ -34,7 +34,7 @@ fn stage2(data: &[isize]) -> isize {
     let mut data = data.to_vec();
     let mut env = Environment::once(Some(5));
 
-    Program::wrap_and_eval_with_env(data.as_mut_slice(), &mut env, &Config::day05()).unwrap();
+    Program::wrap_and_eval_with_env(data.as_mut_slice(), &mut env).unwrap();
 
     let output = env.unwrap_input_consumed_once();
     output.expect("No output?")

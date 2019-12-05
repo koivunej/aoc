@@ -1,4 +1,4 @@
-use intcode::{Program, Environment, Config};
+use intcode::{Program, Environment};
 
 #[test]
 fn stage1_example() {
@@ -6,7 +6,7 @@ fn stage1_example() {
 
     let expected = &[3500isize, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
 
-    Program::wrap_and_eval(&mut prog, &Config::default()).unwrap();
+    Program::wrap_and_eval(&mut prog).unwrap();
 
     assert_eq!(&prog[..], expected);
 }
@@ -18,7 +18,7 @@ fn io_example() {
 
     let mut env = Environment::Once(Some(1), None);
 
-    Program::wrap_and_eval_with_env(&mut prog, &mut env, &Config::day05()).unwrap();
+    Program::wrap_and_eval_with_env(&mut prog, &mut env).unwrap();
 
     let output = env.unwrap_input_consumed_once();
 
@@ -67,9 +67,8 @@ fn stage2_input_eq_0() {
 fn stage2_example_scenario(data: &[isize], input: isize) -> isize {
     let mut prog = data.to_vec();
     let mut env = Environment::once(Some(input));
-    let conf = Config::day05();
 
-    Program::wrap_and_eval_with_env(&mut prog, &mut env, &conf).unwrap();
+    Program::wrap_and_eval_with_env(&mut prog, &mut env).unwrap();
 
     let (input, output) = env.unwrap_once();
     assert_eq!(input, None);
@@ -90,9 +89,8 @@ fn stage2_larger_example() {
     for (input, expected) in params {
         let mut prog = code.to_vec();
         let mut env = Environment::collector(Some(*input));
-        let conf = Config::day05();
 
-        Program::wrap_and_eval_with_env(&mut prog, &mut env, &conf).unwrap();
+        Program::wrap_and_eval_with_env(&mut prog, &mut env).unwrap();
 
         let output = env.unwrap_collected();
         assert_eq!(&output[..], &[*expected]);

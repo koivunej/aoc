@@ -76,4 +76,3 @@ impl IO for Environment {
     fn input(&mut self) -> Result<isize, ProgramError> { self.input() }
     fn output(&mut self, value: isize) -> Result<(), ProgramError> { self.output(value) }
 }
-

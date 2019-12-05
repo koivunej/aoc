@@ -98,14 +98,13 @@ impl<'a> Program<'a> {
     }
 
     /// Returns Ok(instruction_pointer) for the halt instruction
-    pub fn wrap_and_eval(data: &mut [isize], config: &crate::Config) -> Result<usize, InvalidProgram> {
-        Self::wrap_and_eval_with_env(data, &mut Environment::default(), config)
+    pub fn wrap_and_eval(data: &mut [isize]) -> Result<usize, InvalidProgram> {
+        Self::wrap_and_eval_with_env(data, &mut Environment::default())
     }
 
     pub fn wrap_and_eval_with_env(
         data: &mut [isize],
         env: &mut Environment,
-        _config: &crate::Config,
     ) -> Result<usize, InvalidProgram> {
         let mut p = Program {
             mem: data,

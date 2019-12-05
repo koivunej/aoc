@@ -9,18 +9,6 @@ pub use util::{ParsingError, parse_program};
 pub use env::Environment;
 pub use exec::Program;
 
-/// Configuration for the virtual machine; default will provide the minimum required.
-/// Basically betting for restrictions on the VM operation... Not sure why.
-#[derive(Default)]
-pub struct Config {
-}
-
-impl Config {
-    pub fn day05() -> Self {
-        Self::default()
-    }
-}
-
 trait IO {
     fn input(&mut self) -> Result<isize, ProgramError>;
     fn output(&mut self, value: isize) -> Result<(), ProgramError>;
