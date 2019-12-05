@@ -1,8 +1,14 @@
+use std::convert::TryFrom;
+use instr::{Operation, OpCode};
+
+mod instr {
+
 use smallvec::SmallVec;
 use std::convert::TryFrom;
+use crate::{DecodingError, DecodedOperation, Params, Param, InvalidReadAddress, BadWrite};
 
 #[derive(Debug, PartialEq)]
-pub enum OpCode {
+pub(crate) enum OpCode {
     BinOp(BinOp),
     Store,
     Print,
@@ -33,13 +39,13 @@ impl OpCode {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum UnaryCondition {
+pub(crate) enum UnaryCondition {
     OnTrue,
     OnFalse,
 }
 
 impl UnaryCondition {
-    fn eval(&self, first: isize) -> bool {
+    pub(crate) fn eval(&self, first: isize) -> bool {
         match *self {
             Self::OnTrue => first != 0,
             Self::OnFalse => first == 0,
@@ -48,19 +54,20 @@ impl UnaryCondition {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum BinaryCondition {
+pub(crate) enum BinaryCondition {
     OnLessThan,
     OnEq,
 }
 
 impl BinaryCondition {
-    fn eval(&self, first: isize, second: isize) -> bool {
+    pub(crate) fn eval(&self, first: isize, second: isize) -> bool {
         match *self {
             Self::OnLessThan => first < second,
             Self::OnEq => first == second,
         }
     }
 }
+
 
 impl TryFrom<isize> for OpCode {
     type Error = DecodingError;
@@ -83,7 +90,43 @@ impl TryFrom<isize> for OpCode {
 }
 
 #[derive(Debug)]
-struct ParameterModes {
+pub struct Operation(OpCode, ParameterModes);
+
+impl DecodedOperation for Operation {
+    type Parameters = ParameterModes;
+
+    fn unpack(self) -> (OpCode, Self::Parameters) {
+        (self.0, self.1)
+    }
+
+    fn default_parameters(&self) -> bool { self.1.is_default() }
+}
+
+impl TryFrom<isize> for Operation {
+    type Error = DecodingError;
+
+    fn try_from(raw: isize) -> Result<Self, Self::Error> {
+        if raw < 0 {
+            return Err(DecodingError::UnknownOpCode(raw));
+        }
+
+        let op = OpCode::try_from(raw)?;
+        let mut pvs = ParameterModes::try_from(raw)?
+            .at_most(op.parameters())
+            .map_err(|_| DecodingError::TooManyParameters(raw))?;
+
+        if op.only_default_parameters() {
+            pvs = pvs
+                .all_must_equal_default()
+                .map_err(|_| DecodingError::InvalidParameterMode(raw))?;
+        }
+
+        Ok(Operation(op, pvs))
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ParameterModes {
     modes: SmallVec<[ParameterMode; 4]>,
 }
 
@@ -120,47 +163,22 @@ impl TryFrom<isize> for ParameterModes {
     }
 }
 
-#[derive(Debug)]
-pub struct Operation(OpCode, ParameterModes);
+impl Params for ParameterModes {
+    type Parameter = ParameterMode;
 
-#[derive(Debug)]
-pub enum DecodingError {
-    UnknownOpCode(isize),
-    InvalidParameterMode(isize),
-    TooManyParameters(isize),
-}
-
-impl TryFrom<isize> for Operation {
-    type Error = DecodingError;
-
-    fn try_from(raw: isize) -> Result<Self, Self::Error> {
-        if raw < 0 {
-            return Err(DecodingError::UnknownOpCode(raw));
-        }
-
-        let op = OpCode::try_from(raw)?;
-        let mut pvs = ParameterModes::try_from(raw)?
-            .at_most(op.parameters())
-            .map_err(|_| DecodingError::TooManyParameters(raw))?;
-
-        if op.only_default_parameters() {
-            pvs = pvs
-                .all_must_equal_default()
-                .map_err(|_| DecodingError::InvalidParameterMode(raw))?;
-        }
-
-        Ok(Operation(op, pvs))
+    fn mode(&self, index: usize) -> &Self::Parameter {
+        self.mode(index)
     }
 }
 
 static DEFAULT_PARAMETER_MODE: ParameterMode = ParameterMode::Address;
 
 impl ParameterModes {
-    fn mode(&self, index: usize) -> &ParameterMode {
+    pub(crate) fn mode(&self, index: usize) -> &ParameterMode {
         self.modes.get(index).unwrap_or(&DEFAULT_PARAMETER_MODE)
     }
 
-    fn is_default(&self) -> bool {
+    pub(crate) fn is_default(&self) -> bool {
         self.modes.is_empty() || self.modes.iter().all(|pm| pm == &DEFAULT_PARAMETER_MODE)
     }
 
@@ -189,31 +207,41 @@ impl ParameterModes {
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-enum ParameterMode {
+pub(crate) enum ParameterMode {
     Address,
     Immediate,
 }
 
 impl ParameterMode {
-    fn eval(self, arg: isize, program: &[isize]) -> isize {
+    pub(crate) fn read(self, arg: isize, program: &[isize]) -> Result<isize, InvalidReadAddress> {
         match self {
             ParameterMode::Address => {
                 assert!(arg >= 0);
-                program[arg as usize]
+                program.get(arg as usize)
+                    .cloned()
+                    .ok_or(crate::InvalidReadAddress(arg))
             }
-            ParameterMode::Immediate => arg,
+            ParameterMode::Immediate => Ok(arg),
         }
     }
 
-    fn store(self, value: isize, arg: isize, program: &mut [isize]) {
+    pub(crate) fn write(self, value: isize, arg: isize, program: &mut [isize]) -> Result<(), BadWrite> {
+        use BadWrite::*;
         match self {
             ParameterMode::Address => {
                 assert!(arg >= 0);
-                program[arg as usize] = value;
+                let cell = program.get_mut(arg as usize).ok_or(AddressOutOfBounds)?;
+                *cell = value;
+                Ok(())
             }
-            ParameterMode::Immediate => panic!("Cannot store on immediate"),
+            ParameterMode::Immediate => Err(ImmediateParameter),
         }
     }
+}
+
+impl Param for ParameterMode {
+    fn read(self, arg: isize, memory: &[isize]) -> Result<isize, InvalidReadAddress> { self.read(arg, memory) }
+    fn write(self, value: isize, arg: isize, memory: &mut [isize]) -> Result<(), BadWrite> { self.write(value, arg, memory) }
 }
 
 #[derive(Debug, PartialEq)]
@@ -223,12 +251,13 @@ pub enum BinOp {
 }
 
 impl BinOp {
-    fn eval(&self, lhs: isize, rhs: isize) -> isize {
+    pub(crate) fn eval(&self, lhs: isize, rhs: isize) -> isize {
         match *self {
             BinOp::Add => lhs.checked_add(rhs).expect("Add overflow"),
             BinOp::Mul => lhs.checked_mul(rhs).expect("Mul overflow"),
         }
     }
+}
 }
 
 #[derive(Debug)]
@@ -244,13 +273,48 @@ pub enum ProgramError {
     NoMoreInput,
     CannotOutput,
     NegativeJump(isize),
+    InvalidReadAddress(isize),
+    BadWrite(BadWrite),
 }
 
-impl From<(usize, ProgramError)> for InvalidProgram {
-    fn from((instruction_pointer, error): (usize, ProgramError)) -> Self {
+#[derive(Debug)]
+pub enum DecodingError {
+    UnknownOpCode(isize),
+    InvalidParameterMode(isize),
+    TooManyParameters(isize),
+}
+
+struct InvalidReadAddress(isize);
+
+impl From<InvalidReadAddress> for ProgramError {
+    fn from(InvalidReadAddress(addr): InvalidReadAddress) -> Self {
+        ProgramError::InvalidReadAddress(addr)
+    }
+}
+
+impl From<BadWrite> for ProgramError {
+    fn from(b: BadWrite) -> Self {
+        ProgramError::BadWrite(b)
+    }
+}
+
+impl From<DecodingError> for ProgramError {
+    fn from(d: DecodingError) -> Self {
+        ProgramError::Decoding(d)
+    }
+}
+
+#[derive(Debug)]
+pub enum BadWrite {
+    AddressOutOfBounds,
+    ImmediateParameter,
+}
+
+impl ProgramError {
+    fn at(self, instruction_pointer: usize) -> InvalidProgram {
         InvalidProgram {
             instruction_pointer,
-            error,
+            error: self,
         }
     }
 }
@@ -269,14 +333,43 @@ impl Config {
         }
     }
 
-    fn validate(&self, ip: usize, op: Operation) -> Result<Operation, InvalidProgram> {
-        if !self.parameter_modes && !op.1.is_default() {
-            return Err((ip, ProgramError::Unsupported(op)).into());
+    fn validate(&self, op: Operation) -> Result<Operation, ProgramError> {
+        if !self.parameter_modes && !op.default_parameters() {
+            return Err(ProgramError::Unsupported(op));
         }
 
         // first about allowing each op, ... too much boilerplate
         Ok(op)
     }
+}
+
+trait IO {
+    fn input(&mut self) -> Result<isize, ProgramError>;
+    fn output(&mut self, value: isize) -> Result<(), ProgramError>;
+}
+
+trait Params {
+    type Parameter: Param;
+
+    fn mode(&self, index: usize) -> &Self::Parameter;
+}
+
+trait Param {
+    fn read(self, arg: isize, memory: &[isize]) -> Result<isize, InvalidReadAddress>;
+    fn write(self, value: isize, arg: isize, memory: &mut [isize]) -> Result<(), BadWrite>;
+}
+
+trait DecodedOperation {
+    type Parameters: Params;
+
+    fn unpack(self) -> (instr::OpCode, Self::Parameters);
+    fn default_parameters(&self) -> bool;
+}
+
+trait Decoder {
+    type Operation: DecodedOperation;
+
+    fn decode(&self, ip: usize, value: isize) -> Result<Self::Operation, InvalidProgram>;
 }
 
 #[derive(Debug)]
@@ -293,21 +386,21 @@ impl std::default::Default for Environment {
 }
 
 impl Environment {
-    fn input(&mut self, ip: usize) -> Result<isize, InvalidProgram> {
+    fn input(&mut self) -> Result<isize, ProgramError> {
         match *self {
-            Environment::NoIO => Err((ip, ProgramError::NoMoreInput).into()),
+            Environment::NoIO => Err(ProgramError::NoMoreInput),
             Environment::Once(ref mut input, _) | Environment::Collector(ref mut input, _) => input
                 .take()
-                .ok_or_else(|| (ip, ProgramError::NoMoreInput).into()),
+                .ok_or(ProgramError::NoMoreInput),
         }
     }
 
-    fn output(&mut self, ip: usize, value: isize) -> Result<(), InvalidProgram> {
+    fn output(&mut self, value: isize) -> Result<(), ProgramError> {
         match *self {
-            Environment::NoIO => Err((ip, ProgramError::CannotOutput).into()),
+            Environment::NoIO => Err(ProgramError::CannotOutput),
             Environment::Once(_, ref mut output) => {
                 if output.is_some() {
-                    Err((ip, ProgramError::CannotOutput).into())
+                    Err(ProgramError::CannotOutput)
                 } else {
                     *output = Some(value);
                     Ok(())
@@ -350,6 +443,11 @@ impl Environment {
     }
 }
 
+impl IO for Environment {
+    fn input(&mut self) -> Result<isize, ProgramError> { self.input() }
+    fn output(&mut self, value: isize) -> Result<(), ProgramError> { self.output(value) }
+}
+
 pub struct Program<'a> {
     mem: &'a mut [isize],
     env: &'a mut Environment,
@@ -362,10 +460,10 @@ enum State {
 }
 
 impl<'a> Program<'a> {
-    fn step(&mut self, ip: usize) -> Result<State, InvalidProgram> {
-        let Operation(op, pvs) = self.decode(ip)?;
 
-        let ip = match op {
+    fn exec(&mut self, ip: usize, op: Operation) -> Result<State, ProgramError> {
+        let (code, pvs) = op.unpack();
+        let ip = match code {
             OpCode::Halt => return Ok(State::HaltedAt(ip)),
             OpCode::BinOp(b) => {
                 let first = pvs.mode(0);
@@ -373,35 +471,34 @@ impl<'a> Program<'a> {
                 let third = pvs.mode(2);
 
                 let res = b.eval(
-                    first.eval(self.mem[ip + 1], &self.mem),
-                    second.eval(self.mem[ip + 2], &self.mem),
+                    first.read(self.mem[ip + 1], &self.mem)?,
+                    second.read(self.mem[ip + 2], &self.mem)?,
                 );
 
-                third.store(res, self.mem[ip + 3], &mut self.mem);
+                third.write(res, self.mem[ip + 3], &mut self.mem)?;
 
                 ip + 4
             }
             OpCode::Store => {
                 let target = pvs.mode(0);
-                let input = self.env.input(ip)?;
-                target.store(input, self.mem[ip + 1], &mut self.mem);
+                let input = self.env.input()?;
+                target.write(input, self.mem[ip + 1], &mut self.mem)?;
 
                 ip + 2
             }
             OpCode::Print => {
-                let source = pvs.mode(0);
-                self.env
-                    .output(ip, source.eval(self.mem[ip + 1], &self.mem))?;
+                let value = pvs.mode(0).read(self.mem[ip + 1], &self.mem)?;
+                self.env.output(value)?;
 
                 ip + 2
             }
             OpCode::Jump(cond) => {
-                let cmp = pvs.mode(0).eval(self.mem[ip + 1], &self.mem);
-                let target = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
+                let cmp = pvs.mode(0).read(self.mem[ip + 1], &self.mem)?;
+                let target = pvs.mode(1).read(self.mem[ip + 2], &self.mem)?;
 
                 if cond.eval(cmp) {
                     if target < 0 {
-                        return Err((ip, ProgramError::NegativeJump(target)).into());
+                        return Err(ProgramError::NegativeJump(target));
                     }
                     target as usize
                 } else {
@@ -409,12 +506,12 @@ impl<'a> Program<'a> {
                 }
             }
             OpCode::StoreCompared(bincond) => {
-                let first = pvs.mode(0).eval(self.mem[ip + 1], &self.mem);
-                let second = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
+                let first = pvs.mode(0).read(self.mem[ip + 1], &self.mem)?;
+                let second = pvs.mode(1).read(self.mem[ip + 2], &self.mem)?;
                 let target = pvs.mode(2);
 
                 let res = if bincond.eval(first, second) { 1 } else { 0 };
-                target.store(res, self.mem[ip + 3], &mut self.mem);
+                target.write(res, self.mem[ip + 3], &mut self.mem)?;
 
                 ip + 4
             }
@@ -423,10 +520,16 @@ impl<'a> Program<'a> {
         Ok(State::Running(ip))
     }
 
-    fn decode(&self, ip: usize) -> Result<Operation, InvalidProgram> {
+    fn step(&mut self, ip: usize) -> Result<State, InvalidProgram> {
+        self.decode(ip)
+            .and_then(|op| self.exec(ip, op))
+            .map_err(|e| e.at(ip))
+    }
+
+    fn decode(&self, ip: usize) -> Result<Operation, ProgramError> {
         Operation::try_from(self.mem[ip])
-            .map_err(|dec| (ip, ProgramError::Decoding(dec)).into())
-            .and_then(|op| self.config.validate(ip, op))
+            .map_err(ProgramError::from)
+            .and_then(|op| self.config.validate(op))
     }
 
     fn eval(&mut self) -> Result<usize, InvalidProgram> {
@@ -498,7 +601,8 @@ pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<isize>, Parsin
 
 #[cfg(test)]
 mod tests {
-    use super::{BinOp, Config, Environment, OpCode, ParameterMode, ParameterModes, Program};
+    use super::{Config, Environment, Program};
+    use super::instr::{BinOp, OpCode, ParameterMode, ParameterModes};
     use std::convert::TryFrom;
 
     #[test]
