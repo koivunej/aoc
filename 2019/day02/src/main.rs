@@ -1,4 +1,4 @@
-use intcode::{Program, Config, parse_program, ParsingError};
+use intcode::{parse_program, Config, ParsingError, Program};
 
 fn main() {
     let stdin = std::io::stdin();
@@ -9,7 +9,7 @@ fn main() {
         Err(ParsingError::Io(e, line)) => {
             eprintln!("Failed to read stdin near line {}: {}", line, e);
             std::process::exit(1);
-        },
+        }
         Err(ParsingError::Int(e, line, raw)) => {
             eprintln!("Bad input at line {}: \"{}\" ({})", line, raw, e);
             std::process::exit(1);
@@ -24,7 +24,11 @@ fn main() {
         let magic = 19690720;
 
         if let Some((i, j)) = find_coords(&data[..], magic) {
-            println!("Found it at {:?}: 100 * noun + verb == {}", (i, j), 100 * i + j);
+            println!(
+                "Found it at {:?}: 100 * noun + verb == {}",
+                (i, j),
+                100 * i + j
+            );
         } else {
             println!("Did not find...");
         }
@@ -38,13 +42,11 @@ fn stage1(data: &[isize]) -> isize {
     data[1] = 12;
     data[2] = 2;
 
-    Program::wrap_and_eval(&mut data, &Config::default())
-        .expect("Invalid program");
+    Program::wrap_and_eval(&mut data, &Config::default()).expect("Invalid program");
     data[0]
 }
 
 fn find_coords(input: &[isize], magic: isize) -> Option<(isize, isize)> {
-
     let mut copy = input.to_vec();
 
     for i in 0..100 {
@@ -77,8 +79,7 @@ fn full_stage1() {
 fn full_stage2() {
     with_input(|data| {
         let magic = 19690720;
-        let res = find_coords(data, magic)
-            .map(|(noun, verb)| 100 * noun + verb);
+        let res = find_coords(data, magic).map(|(noun, verb)| 100 * noun + verb);
         assert_eq!(res, Some(7960));
     });
 }
@@ -87,8 +88,7 @@ fn full_stage2() {
 fn with_input<V, F: FnOnce(&[isize]) -> V>(f: F) -> V {
     use std::io::BufReader;
 
-    let file = std::fs::File::open("input")
-        .expect("Could not open day02 input?");
+    let file = std::fs::File::open("input").expect("Could not open day02 input?");
 
     let data = parse_program(BufReader::new(file)).unwrap();
 

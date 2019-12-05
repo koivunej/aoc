@@ -1,5 +1,5 @@
-use std::convert::TryFrom;
 use smallvec::SmallVec;
+use std::convert::TryFrom;
 
 #[derive(Debug, PartialEq)]
 pub enum OpCode {
@@ -29,7 +29,7 @@ impl UnaryCondition {
 #[derive(Debug, PartialEq)]
 pub enum BinaryCondition {
     OnLessThan,
-    OnEq
+    OnEq,
 }
 
 impl BinaryCondition {
@@ -58,7 +58,9 @@ impl TryFrom<isize> for OpCode {
             7 => OpCode::StoreCompared(BinaryCondition::OnLessThan),
             8 => OpCode::StoreCompared(BinaryCondition::OnEq),
             99 => OpCode::Halt,
-            x => { return Err(UnknownOpCode(x)); },
+            x => {
+                return Err(UnknownOpCode(x));
+            }
         })
     }
 }
@@ -78,18 +80,24 @@ impl TryFrom<isize> for ParameterModes {
 
     fn try_from(raw: isize) -> Result<ParameterModes, Self::Error> {
         if !Self::instruction_has_modes(raw) {
-            Ok(ParameterModes { modes: SmallVec::new() })
+            Ok(ParameterModes {
+                modes: SmallVec::new(),
+            })
         } else if raw > 0 {
             let mut shifted = raw / 100;
-            let mut pm = ParameterModes { modes: SmallVec::new() };
+            let mut pm = ParameterModes {
+                modes: SmallVec::new(),
+            };
             while shifted > 0 {
                 let rem = shifted % 10;
                 if rem > 1 {
                     return Err(ParameterModeError::InvalidMode(rem));
                 }
-                pm.modes.push(
-                    if rem == 1 { ParameterMode::Immediate } else { ParameterMode::Address }
-                );
+                pm.modes.push(if rem == 1 {
+                    ParameterMode::Immediate
+                } else {
+                    ParameterMode::Address
+                });
 
                 shifted /= 10;
             }
@@ -110,8 +118,7 @@ impl ParameterModes {
     #[allow(dead_code)]
     fn is_default(&self) -> bool {
         // when none were specified we have only defaults
-        self.modes.is_empty()
-            || self.modes.iter().all(|pm| pm == &DEFAULT_PARAMETER_MODE)
+        self.modes.is_empty() || self.modes.iter().all(|pm| pm == &DEFAULT_PARAMETER_MODE)
     }
 
     fn instruction_has_modes(raw: isize) -> bool {
@@ -127,9 +134,8 @@ impl ParameterModes {
 
     fn at_most(mut self, count: usize) -> Self {
         assert!(self.modes.len() <= count);
-        self.modes.extend(
-            std::iter::repeat(DEFAULT_PARAMETER_MODE)
-                .take(count - self.modes.len()));
+        self.modes
+            .extend(std::iter::repeat(DEFAULT_PARAMETER_MODE).take(count - self.modes.len()));
 
         self
     }
@@ -138,7 +144,7 @@ impl ParameterModes {
 #[derive(PartialEq, Debug, Clone, Copy)]
 enum ParameterMode {
     Address,
-    Immediate
+    Immediate,
 }
 
 impl ParameterMode {
@@ -147,7 +153,7 @@ impl ParameterMode {
             ParameterMode::Address => {
                 assert!(arg >= 0);
                 program[arg as usize]
-            },
+            }
             ParameterMode::Immediate => arg,
         }
     }
@@ -157,7 +163,7 @@ impl ParameterMode {
             ParameterMode::Address => {
                 assert!(arg >= 0);
                 program[arg as usize] = value;
-            },
+            }
             ParameterMode::Immediate => panic!("Cannot store on immediate"),
         }
     }
@@ -207,7 +213,7 @@ impl From<(usize, UnknownOpCode)> for InvalidProgram {
         let error = ProgramError::UnknownOpCode(op);
         InvalidProgram {
             instruction_pointer,
-            error
+            error,
         }
     }
 }
@@ -235,7 +241,12 @@ impl Config {
         }
     }
 
-    fn validate(&self, raw: isize, ip: usize, op: Result<OpCode, UnknownOpCode>) -> Result<OpCode, InvalidProgram> {
+    fn validate(
+        &self,
+        raw: isize,
+        ip: usize,
+        op: Result<OpCode, UnknownOpCode>,
+    ) -> Result<OpCode, InvalidProgram> {
         if !self.parameter_modes && ParameterModes::instruction_has_modes(raw) {
             return Err((ip, UnknownOpCode(raw)).into());
         }
@@ -262,11 +273,9 @@ impl Environment {
     fn input(&mut self, ip: usize) -> Result<isize, InvalidProgram> {
         match *self {
             Environment::NoIO => Err((ip, ProgramError::NoMoreInput).into()),
-            Environment::Once(ref mut input, _)
-            | Environment::Collector(ref mut input, _) => {
-                input.take()
-                    .ok_or_else(|| (ip, ProgramError::NoMoreInput).into())
-            }
+            Environment::Once(ref mut input, _) | Environment::Collector(ref mut input, _) => input
+                .take()
+                .ok_or_else(|| (ip, ProgramError::NoMoreInput).into()),
         }
     }
 
@@ -280,7 +289,7 @@ impl Environment {
                     *output = Some(value);
                     Ok(())
                 }
-            },
+            }
             Environment::Collector(_, ref mut collected) => Ok(collected.push(value)),
         }
     }
@@ -323,7 +332,6 @@ impl<'a> Program<'a> {
             let jump_target = match next {
                 OpCode::Halt => return Ok(ip),
                 OpCode::BinOp(b) => {
-
                     let pvs = ParameterModes::try_from(op)
                         .expect("Failed to deduce parameter modes")
                         .at_most(3);
@@ -334,14 +342,14 @@ impl<'a> Program<'a> {
 
                     let res = b.eval(
                         first.eval(self.prog[ip + 1], &self.prog),
-                        second.eval(self.prog[ip + 2], &self.prog));
+                        second.eval(self.prog[ip + 2], &self.prog),
+                    );
 
                     third.store(res, self.prog[ip + 3], &mut self.prog);
 
                     ip + 4
-                },
+                }
                 OpCode::Store => {
-
                     // this cannot have parameter modes...
                     let pvs = ParameterModes::try_from(op)
                         .expect("Failed to deduce parameter modes")
@@ -353,7 +361,7 @@ impl<'a> Program<'a> {
                     target.store(input, self.prog[ip + 1], &mut self.prog);
 
                     ip + 2
-                },
+                }
                 OpCode::Print => {
                     let pvs = ParameterModes::try_from(op)
                         .expect("Failed to deduce parameter modes")
@@ -363,7 +371,7 @@ impl<'a> Program<'a> {
                     env.output(ip, source.eval(self.prog[ip + 1], &self.prog))?;
 
                     ip + 2
-                },
+                }
                 OpCode::Jump(cond) => {
                     let pvs = ParameterModes::try_from(op)
                         .expect("Failed to deduce parameter modes")
@@ -377,7 +385,7 @@ impl<'a> Program<'a> {
                     } else {
                         ip + 3
                     }
-                },
+                }
                 OpCode::StoreCompared(bincond) => {
                     let pvs = ParameterModes::try_from(op)
                         .expect("Failed to deduce parameter modes")
@@ -403,7 +411,11 @@ impl<'a> Program<'a> {
         Self::wrap_and_eval_with_env(data, &mut Environment::default(), config)
     }
 
-    pub fn wrap_and_eval_with_env(data: &mut [isize], env: &mut Environment, config: &Config) -> Result<usize, InvalidProgram> {
+    pub fn wrap_and_eval_with_env(
+        data: &mut [isize],
+        env: &mut Environment,
+        config: &Config,
+    ) -> Result<usize, InvalidProgram> {
         let mut p = Program { prog: data };
         p.eval(env, config)
     }
@@ -432,10 +444,7 @@ pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<isize>, Parsin
             return Ok(data);
         }
 
-        let parts = buffer
-            .trim()
-            .split(',')
-            .map(isize::from_str);
+        let parts = buffer.trim().split(',').map(isize::from_str);
 
         for part in parts {
             let part = match part {
@@ -452,22 +461,16 @@ pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<isize>, Parsin
 
 #[cfg(test)]
 mod tests {
+    use super::{
+        parse_program, BinOp, Config, Environment, OpCode, ParameterMode, ParameterModes, Program,
+    };
     use std::convert::TryFrom;
-    use super::{Program, Config, Environment, OpCode, BinOp, ParameterModes, ParameterMode, parse_program};
 
     #[test]
     fn stage1_example() {
-        let mut prog = vec![
-            1, 9, 10, 3,
-            2, 3, 11, 0,
-            99,
-            30, 40, 50];
+        let mut prog = vec![1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50];
 
-        let expected = &[
-            3500isize, 9, 10, 70,
-            2, 3, 11, 0,
-            99,
-            30, 40, 50];
+        let expected = &[3500isize, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
 
         Program::wrap_and_eval(&mut prog, &Config::default()).unwrap();
 
@@ -476,8 +479,7 @@ mod tests {
 
     #[test]
     fn io_example() {
-
-        let mut prog = vec![3,0,4,0,99];
+        let mut prog = vec![3, 0, 4, 0, 99];
         let expected = &[1, 0, 4, 0, 99];
 
         let mut env = Environment::Once(Some(1), None);
@@ -505,36 +507,36 @@ mod tests {
 
     #[test]
     fn day05_stage2_eq_ne_example() {
-        let data = &[3,9,8,9,10,9,4,9,99,-1,8];
+        let data = &[3, 9, 8, 9, 10, 9, 4, 9, 99, -1, 8];
         assert_eq!(day05_stage2_example_scenario(data, 8), 1);
         assert_eq!(day05_stage2_example_scenario(data, 7), 0);
     }
 
     #[test]
     fn day05_stage2_lt_example() {
-        let data = &[3,9,7,9,10,9,4,9,99,-1,8];
+        let data = &[3, 9, 7, 9, 10, 9, 4, 9, 99, -1, 8];
         assert_eq!(day05_stage2_example_scenario(data, 7), 1);
         assert_eq!(day05_stage2_example_scenario(data, 8), 0);
     }
 
     #[test]
     fn day05_stage2_eq_ne_example_immediate() {
-        let data = &[3,3,1108,-1,8,3,4,3,99];
+        let data = &[3, 3, 1108, -1, 8, 3, 4, 3, 99];
         assert_eq!(day05_stage2_example_scenario(data, 8), 1);
         assert_eq!(day05_stage2_example_scenario(data, 7), 0);
     }
 
     #[test]
     fn day05_stage2_lt_example_immediate() {
-        let data = &[3,3,1107,-1,8,3,4,3,99];
+        let data = &[3, 3, 1107, -1, 8, 3, 4, 3, 99];
         assert_eq!(day05_stage2_example_scenario(data, 7), 1);
         assert_eq!(day05_stage2_example_scenario(data, 8), 0);
     }
 
     #[test]
     fn day05_stage2_input_eq_0() {
-        let addressed = &[3,12,6,12,15,1,13,14,13,4,13,99,-1,0,1,9];
-        let immediate = &[3,3,1105,-1,9,1101,0,0,12,4,12,99,1];
+        let addressed = &[3, 12, 6, 12, 15, 1, 13, 14, 13, 4, 13, 99, -1, 0, 1, 9];
+        let immediate = &[3, 3, 1105, -1, 9, 1101, 0, 0, 12, 4, 12, 99, 1];
         for code in &[&addressed[..], &immediate[..]] {
             assert_eq!(day05_stage2_example_scenario(code, 0), 0);
             assert_eq!(day05_stage2_example_scenario(code, 2), 1);
@@ -556,19 +558,13 @@ mod tests {
     #[test]
     fn day05_stage2_larger_example() {
         let code = &[
-            3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,
-            1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,
-            999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99
+            3, 21, 1008, 21, 8, 20, 1005, 20, 22, 107, 8, 21, 20, 1006, 20, 31, 1106, 0, 36, 98, 0,
+            0, 1002, 21, 125, 20, 4, 20, 1105, 1, 46, 104, 999, 1105, 1, 46, 1101, 1000, 1, 20, 4,
+            20, 1105, 1, 46, 98, 99,
         ];
 
         // careful exploration of the whole state space :)
-        let params = &[
-            (6, 999),
-            (7, 999),
-            (8, 1000),
-            (9, 1001),
-            (10, 1001),
-        ];
+        let params = &[(6, 999), (7, 999), (8, 1000), (9, 1001), (10, 1001)];
 
         for (input, expected) in params {
             let mut prog = code.to_vec();
@@ -581,5 +577,4 @@ mod tests {
             assert_eq!(&output[..], &[*expected]);
         }
     }
-
 }
