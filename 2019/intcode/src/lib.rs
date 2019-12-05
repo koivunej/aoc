@@ -41,12 +41,8 @@ impl BinaryCondition {
     }
 }
 
-#[doc(hidden)]
-#[derive(Debug)]
-pub struct UnknownOpCode(isize);
-
 impl TryFrom<isize> for OpCode {
-    type Error = UnknownOpCode;
+    type Error = DecodingError;
     fn try_from(u: isize) -> Result<Self, Self::Error> {
         Ok(match u % 100 {
             1 => OpCode::BinOp(BinOp::Add),
@@ -59,24 +55,19 @@ impl TryFrom<isize> for OpCode {
             8 => OpCode::StoreCompared(BinaryCondition::OnEq),
             99 => OpCode::Halt,
             x => {
-                return Err(UnknownOpCode(x));
+                return Err(DecodingError::UnknownOpCode(x));
             }
         })
     }
 }
 
+#[derive(Debug)]
 struct ParameterModes {
     modes: SmallVec<[ParameterMode; 4]>,
 }
 
-#[derive(Debug)]
-enum ParameterModeError {
-    NegativeOpCode,
-    InvalidMode(isize),
-}
-
 impl TryFrom<isize> for ParameterModes {
-    type Error = ParameterModeError;
+    type Error = DecodingError;
 
     fn try_from(raw: isize) -> Result<ParameterModes, Self::Error> {
         if !Self::instruction_has_modes(raw) {
@@ -91,7 +82,7 @@ impl TryFrom<isize> for ParameterModes {
             while shifted > 0 {
                 let rem = shifted % 10;
                 if rem > 1 {
-                    return Err(ParameterModeError::InvalidMode(rem));
+                    return Err(DecodingError::InvalidParameterMode(rem));
                 }
                 pm.modes.push(if rem == 1 {
                     ParameterMode::Immediate
@@ -103,28 +94,44 @@ impl TryFrom<isize> for ParameterModes {
             }
             Ok(pm)
         } else {
-            Err(ParameterModeError::NegativeOpCode)
+            unreachable!("Negative values must be handled before calling this method");
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct Operation(OpCode, ParameterModes, isize);
+
+#[derive(Debug)]
+pub enum DecodingError {
+    UnknownOpCode(isize),
+    InvalidParameterMode(isize),
+}
+
+impl TryFrom<isize> for Operation {
+    type Error = DecodingError;
+
+    fn try_from(raw: isize) -> Result<Self, Self::Error> {
+        if raw < 0 {
+            return Err(DecodingError::UnknownOpCode(raw));
+        }
+
+        let op = OpCode::try_from(raw)?;
+        let pvs = ParameterModes::try_from(raw)?;
+
+        Ok(Operation(op, pvs, raw))
     }
 }
 
 static DEFAULT_PARAMETER_MODE: ParameterMode = ParameterMode::Address;
 
 impl ParameterModes {
-    fn for_op(op: isize, amount: usize) -> Self {
-        Self::try_from(op)
-            .expect("Failed to deduce parameter modes")
-            .at_most(amount)
-    }
-
     fn mode(&self, index: usize) -> &ParameterMode {
         self.modes.get(index).unwrap_or(&DEFAULT_PARAMETER_MODE)
     }
 
-    #[allow(dead_code)]
     fn is_default(&self) -> bool {
-        // when none were specified we have only defaults
-        self.modes.is_empty() || self.modes.iter().all(|pm| pm == &DEFAULT_PARAMETER_MODE)
+        self.modes.is_empty()
     }
 
     fn instruction_has_modes(raw: isize) -> bool {
@@ -198,21 +205,10 @@ pub struct InvalidProgram {
 
 #[derive(Debug)]
 pub enum ProgramError {
-    UnknownOpCode(isize),
-    Unsupported(OpCode),
+    Decoding(DecodingError),
+    Unsupported(Operation),
     NoMoreInput,
     CannotOutput,
-}
-
-impl From<(usize, UnknownOpCode)> for InvalidProgram {
-    fn from((instruction_pointer, u): (usize, UnknownOpCode)) -> Self {
-        let UnknownOpCode(op) = u;
-        let error = ProgramError::UnknownOpCode(op);
-        InvalidProgram {
-            instruction_pointer,
-            error,
-        }
-    }
 }
 
 impl From<(usize, ProgramError)> for InvalidProgram {
@@ -225,6 +221,7 @@ impl From<(usize, ProgramError)> for InvalidProgram {
 }
 
 /// Configuration for the virtual machine; default will provide the minimum required.
+/// Basically betting for restrictions on the VM operation... Not sure why.
 #[derive(Default)]
 pub struct Config {
     parameter_modes: bool,
@@ -237,18 +234,13 @@ impl Config {
         }
     }
 
-    fn validate(
-        &self,
-        raw: isize,
-        ip: usize,
-        op: Result<OpCode, UnknownOpCode>,
-    ) -> Result<OpCode, InvalidProgram> {
-        if !self.parameter_modes && ParameterModes::instruction_has_modes(raw) {
-            return Err((ip, UnknownOpCode(raw)).into());
+    fn validate(&self, ip: usize, op: Operation) -> Result<Operation, InvalidProgram> {
+        if !self.parameter_modes && !op.1.is_default() {
+            return Err((ip, ProgramError::Unsupported(op)).into());
         }
 
         // first about allowing each op, ... too much boilerplate
-        op.map_err(|e| (ip, e).into())
+        Ok(op)
     }
 }
 
@@ -322,77 +314,91 @@ pub struct Program<'a> {
     config: &'a Config,
 }
 
+enum State {
+    Running(usize),
+    HaltedAt(usize),
+}
+
 impl<'a> Program<'a> {
+
+    fn step(&mut self, ip: usize) -> Result<State, InvalidProgram> {
+        let op = self.mem[ip];
+
+        let Operation(op, pvs, _) = Operation::try_from(op)
+            .map_err(|dec| (ip, ProgramError::Decoding(dec)).into())
+            .and_then(|op| self.config.validate(ip, op))?;
+
+        let ip = match op {
+            OpCode::Halt => return Ok(State::HaltedAt(ip)),
+            OpCode::BinOp(b) => {
+                let pvs = pvs.at_most(3);
+
+                let first = pvs.mode(0);
+                let second = pvs.mode(1);
+                let third = pvs.mode(2);
+
+                let res = b.eval(
+                    first.eval(self.mem[ip + 1], &self.mem),
+                    second.eval(self.mem[ip + 2], &self.mem));
+
+                third.store(res, self.mem[ip + 3], &mut self.mem);
+
+                ip + 4
+            }
+            OpCode::Store => {
+                // this cannot have parameter modes...
+                let pvs = pvs.at_most(1).all_must_equal_default();
+
+                let target = pvs.mode(0);
+                let input = self.env.input(ip)?;
+                target.store(input, self.mem[ip + 1], &mut self.mem);
+
+                ip + 2
+            }
+            OpCode::Print => {
+                let pvs = pvs.at_most(1);
+
+                let source = pvs.mode(0);
+                self.env.output(ip, source.eval(self.mem[ip + 1], &self.mem))?;
+
+                ip + 2
+            }
+            OpCode::Jump(cond) => {
+                let pvs = pvs.at_most(2);
+
+                let cmp = pvs.mode(0).eval(self.mem[ip + 1], &self.mem);
+                let target = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
+
+                if cond.eval(cmp) {
+                    target as usize
+                } else {
+                    ip + 3
+                }
+            }
+            OpCode::StoreCompared(bincond) => {
+                let pvs = pvs.at_most(3);
+
+                let first = pvs.mode(0).eval(self.mem[ip + 1], &self.mem);
+                let second = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
+                let target = pvs.mode(2);
+
+                let res = if bincond.eval(first, second) { 1 } else { 0 };
+                target.store(res, self.mem[ip + 3], &mut self.mem);
+
+                ip + 4
+            }
+        };
+
+        Ok(State::Running(ip))
+    }
+
     fn eval(&mut self) -> Result<usize, InvalidProgram> {
         let mut ip = 0;
         loop {
-            let op = self.mem[ip];
-            let next = OpCode::try_from(op);
-            let next = self.config.validate(op, ip, next)?;
-
-            let jump_target = match next {
-                OpCode::Halt => return Ok(ip),
-                OpCode::BinOp(b) => {
-                    let pvs = ParameterModes::for_op(op, 3);
-
-                    let first = pvs.mode(0);
-                    let second = pvs.mode(1);
-                    let third = pvs.mode(2);
-
-                    let res = b.eval(
-                        first.eval(self.mem[ip + 1], &self.mem),
-                        second.eval(self.mem[ip + 2], &self.mem));
-
-                    third.store(res, self.mem[ip + 3], &mut self.mem);
-
-                    ip + 4
-                }
-                OpCode::Store => {
-                    // this cannot have parameter modes...
-                    let pvs = ParameterModes::for_op(op, 1)
-                        .all_must_equal_default();
-
-                    let target = pvs.mode(0);
-                    let input = self.env.input(ip)?;
-                    target.store(input, self.mem[ip + 1], &mut self.mem);
-
-                    ip + 2
-                }
-                OpCode::Print => {
-                    let pvs = ParameterModes::for_op(op, 1);
-
-                    let source = pvs.mode(0);
-                    self.env.output(ip, source.eval(self.mem[ip + 1], &self.mem))?;
-
-                    ip + 2
-                }
-                OpCode::Jump(cond) => {
-                    let pvs = ParameterModes::for_op(op, 2);
-
-                    let cmp = pvs.mode(0).eval(self.mem[ip + 1], &self.mem);
-                    let target = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
-
-                    if cond.eval(cmp) {
-                        target as usize
-                    } else {
-                        ip + 3
-                    }
-                }
-                OpCode::StoreCompared(bincond) => {
-                    let pvs = ParameterModes::for_op(op, 3);
-
-                    let first = pvs.mode(0).eval(self.mem[ip + 1], &self.mem);
-                    let second = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
-                    let target = pvs.mode(2);
-
-                    let res = if bincond.eval(first, second) { 1 } else { 0 };
-                    target.store(res, self.mem[ip + 3], &mut self.mem);
-
-                    ip + 4
-                }
+            ip = match self.step(ip)? {
+                State::HaltedAt(ip) => return Ok(ip),
+                State::Running(jump_to) => jump_to,
             };
-
-            ip = jump_target;
         }
     }
 
