@@ -68,14 +68,14 @@ fn find_coords(input: &[isize], magic: isize) -> Option<(isize, isize)> {
 
 #[test]
 fn full_stage1() {
-    with_day02_input(|data| {
+    with_input(|data| {
         assert_eq!(stage1(data), 3224742);
     });
 }
 
 #[test]
 fn full_stage2() {
-    with_day02_input(|data| {
+    with_input(|data| {
         let magic = 19690720;
         let res = find_coords(data, magic)
             .map(|(noun, verb)| 100 * noun + verb);
