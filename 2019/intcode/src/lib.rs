@@ -241,6 +241,7 @@ pub enum ProgramError {
     Unsupported(Operation),
     NoMoreInput,
     CannotOutput,
+    NegativeJump(isize),
 }
 
 impl From<(usize, ProgramError)> for InvalidProgram {
@@ -390,6 +391,9 @@ impl<'a> Program<'a> {
                 let target = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
 
                 if cond.eval(cmp) {
+                    if target < 0 {
+                        return Err((ip, ProgramError::NegativeJump(target)).into());
+                    }
                     target as usize
                 } else {
                     ip + 3
