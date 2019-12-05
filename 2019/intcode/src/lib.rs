@@ -11,6 +11,27 @@ pub enum OpCode {
     Halt,
 }
 
+impl OpCode {
+    fn parameters(&self) -> usize {
+        match *self {
+            OpCode::BinOp(_) => 3,
+            OpCode::Store => 1,
+            OpCode::Print => 1,
+            OpCode::Jump(_) => 2,
+            OpCode::StoreCompared(_) => 2,
+            OpCode::Halt => 0,
+        }
+    }
+
+    fn only_default_parameters(&self) -> bool {
+        if let OpCode::Store = *self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum UnaryCondition {
     OnTrue,
@@ -106,6 +127,7 @@ pub struct Operation(OpCode, ParameterModes, isize);
 pub enum DecodingError {
     UnknownOpCode(isize),
     InvalidParameterMode(isize),
+    TooManyParameters(isize),
 }
 
 impl TryFrom<isize> for Operation {
@@ -117,7 +139,14 @@ impl TryFrom<isize> for Operation {
         }
 
         let op = OpCode::try_from(raw)?;
-        let pvs = ParameterModes::try_from(raw)?;
+        let mut pvs = ParameterModes::try_from(raw)?
+            .at_most(op.parameters())
+            .map_err(|_| DecodingError::TooManyParameters(raw))?;
+
+        if op.only_default_parameters() {
+            pvs = pvs.all_must_equal_default()
+                .map_err(|_| DecodingError::InvalidParameterMode(raw))?;
+        }
 
         Ok(Operation(op, pvs, raw))
     }
@@ -131,26 +160,29 @@ impl ParameterModes {
     }
 
     fn is_default(&self) -> bool {
-        self.modes.is_empty()
+        self.modes.is_empty() || self.modes.iter().all(|pm| pm == &DEFAULT_PARAMETER_MODE)
     }
 
     fn instruction_has_modes(raw: isize) -> bool {
         raw > 100
     }
 
-    fn all_must_equal_default(self) -> Self {
-        if !self.modes.is_empty() {
-            assert!(self.modes.iter().all(|pm| pm == &DEFAULT_PARAMETER_MODE));
+    fn all_must_equal_default(self) -> Result<Self, ()> {
+        if self.modes.is_empty() || self.modes.iter().all(|pm| pm == &DEFAULT_PARAMETER_MODE) {
+            Ok(self)
+        } else {
+            Err(())
         }
-        self
     }
 
-    fn at_most(mut self, count: usize) -> Self {
-        assert!(self.modes.len() <= count);
-        self.modes
-            .extend(std::iter::repeat(DEFAULT_PARAMETER_MODE).take(count - self.modes.len()));
-
-        self
+    fn at_most(mut self, count: usize) -> Result<Self, ()> {
+        use std::iter::repeat;
+        if self.modes.len() <= count {
+            self.modes.extend(repeat(DEFAULT_PARAMETER_MODE).take(count - self.modes.len()));
+            Ok(self)
+        } else {
+            Err(())
+        }
     }
 }
 
@@ -328,8 +360,6 @@ impl<'a> Program<'a> {
         let ip = match op {
             OpCode::Halt => return Ok(State::HaltedAt(ip)),
             OpCode::BinOp(b) => {
-                let pvs = pvs.at_most(3);
-
                 let first = pvs.mode(0);
                 let second = pvs.mode(1);
                 let third = pvs.mode(2);
@@ -343,9 +373,6 @@ impl<'a> Program<'a> {
                 ip + 4
             }
             OpCode::Store => {
-                // this cannot have parameter modes...
-                let pvs = pvs.at_most(1).all_must_equal_default();
-
                 let target = pvs.mode(0);
                 let input = self.env.input(ip)?;
                 target.store(input, self.mem[ip + 1], &mut self.mem);
@@ -353,16 +380,12 @@ impl<'a> Program<'a> {
                 ip + 2
             }
             OpCode::Print => {
-                let pvs = pvs.at_most(1);
-
                 let source = pvs.mode(0);
                 self.env.output(ip, source.eval(self.mem[ip + 1], &self.mem))?;
 
                 ip + 2
             }
             OpCode::Jump(cond) => {
-                let pvs = pvs.at_most(2);
-
                 let cmp = pvs.mode(0).eval(self.mem[ip + 1], &self.mem);
                 let target = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
 
@@ -373,8 +396,6 @@ impl<'a> Program<'a> {
                 }
             }
             OpCode::StoreCompared(bincond) => {
-                let pvs = pvs.at_most(3);
-
                 let first = pvs.mode(0).eval(self.mem[ip + 1], &self.mem);
                 let second = pvs.mode(1).eval(self.mem[ip + 2], &self.mem);
                 let target = pvs.mode(2);
