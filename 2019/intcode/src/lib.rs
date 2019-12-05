@@ -6,7 +6,39 @@ pub enum OpCode {
     BinOp(BinOp),
     Store,
     Print,
+    Jump(UnaryCondition),
+    StoreCompared(BinaryCondition),
     Halt,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum UnaryCondition {
+    OnTrue,
+    OnFalse,
+}
+
+impl UnaryCondition {
+    fn eval(&self, first: isize) -> bool {
+        match *self {
+            Self::OnTrue => first != 0,
+            Self::OnFalse => first == 0,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BinaryCondition {
+    OnLessThan,
+    OnEq
+}
+
+impl BinaryCondition {
+    fn eval(&self, first: isize, second: isize) -> bool {
+        match *self {
+            Self::OnLessThan => first < second,
+            Self::OnEq => first == second,
+        }
+    }
 }
 
 #[doc(hidden)]
@@ -188,17 +220,14 @@ impl From<(usize, ProgramError)> for InvalidProgram {
 /// Configuration for the virtual machine; default will provide the minimum required.
 #[derive(Default)]
 pub struct Config {
-    allow_op3: bool,
-    allow_op4: bool,
     parameter_modes: bool,
 }
 
 impl Config {
     pub fn day05() -> Self {
         Config {
-            allow_op3: true,
-            allow_op4: true,
             parameter_modes: true,
+            ..Self::default()
         }
     }
 
@@ -207,21 +236,8 @@ impl Config {
             return Err((ip, UnknownOpCode(raw)).into());
         }
 
-        match (op, self.allow_op3, self.allow_op4) {
-            (Ok(x @ OpCode::Halt), _, _)
-            | (Ok(x @ OpCode::BinOp(_)), _, _) => Ok(x),
-
-            (Ok(x @ OpCode::Store), allow, _)
-            | (Ok(x @ OpCode::Print), _, allow) => {
-                if allow {
-                    Ok(x)
-                } else {
-                    Err(InvalidProgram::unsupported(ip, x))
-                }
-            },
-
-            (Err(e), _, _) => Err((ip, e).into()),
-        }
+        // first about allowing each op, ... too much boilerplate
+        op.map_err(|e| (ip, e).into())
     }
 }
 
@@ -300,7 +316,7 @@ impl<'a> Program<'a> {
             let next = OpCode::try_from(op);
             let next = config.validate(op, ip, next)?;
 
-            let skipped = match next {
+            let jump_target = match next {
                 OpCode::Halt => return Ok(ip),
                 OpCode::BinOp(b) => {
 
@@ -318,7 +334,7 @@ impl<'a> Program<'a> {
 
                     third.store(res, self.prog[ip + 3], &mut self.prog);
 
-                    4
+                    ip + 4
                 },
                 OpCode::Store => {
 
@@ -332,7 +348,7 @@ impl<'a> Program<'a> {
                     let input = env.input(ip)?;
                     target.store(input, self.prog[ip + 1], &mut self.prog);
 
-                    2
+                    ip + 2
                 },
                 OpCode::Print => {
                     let pvs = ParameterModes::try_from(op)
@@ -342,11 +358,39 @@ impl<'a> Program<'a> {
                     let source = pvs.mode(0);
                     env.output(ip, source.eval(self.prog[ip + 1], &self.prog))?;
 
-                    2
+                    ip + 2
                 },
+                OpCode::Jump(cond) => {
+                    let pvs = ParameterModes::try_from(op)
+                        .expect("Failed to deduce parameter modes")
+                        .at_most(2);
+
+                    let cmp = pvs.mode(0).eval(self.prog[ip + 1], &self.prog);
+                    let target = pvs.mode(1).eval(self.prog[ip + 2], &self.prog);
+
+                    if cond.eval(cmp) {
+                        target as usize
+                    } else {
+                        ip + 3
+                    }
+                },
+                OpCode::StoreCompared(bincond) => {
+                    let pvs = ParameterModes::try_from(op)
+                        .expect("Failed to deduce parameter modes")
+                        .at_most(3);
+
+                    let first = pvs.mode(0).eval(self.prog[ip + 1], &self.prog);
+                    let second = pvs.mode(1).eval(self.prog[ip + 2], &self.prog);
+                    let target = pvs.mode(2);
+
+                    let res = if bincond.eval(first, second) { 1 } else { 0 };
+                    target.store(res, self.prog[ip + 3], &mut self.prog);
+
+                    ip + 4
+                }
             };
 
-            ip = (ip + skipped) % self.prog.len();
+            ip = jump_target;
         }
     }
 
