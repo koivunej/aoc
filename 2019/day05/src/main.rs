@@ -36,7 +36,7 @@ fn stage2(data: &[isize]) -> isize {
 
     Program::wrap_and_eval_with_env(data.as_mut_slice(), &mut env, &Config::day05()).unwrap();
 
-    let (_, output) = env.unwrap_once();
+    let output = env.unwrap_input_consumed_once();
     output.expect("No output?")
 }
 

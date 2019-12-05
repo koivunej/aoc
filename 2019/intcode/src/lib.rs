@@ -328,6 +328,13 @@ impl Environment {
         Self::Collector(input, Vec::new())
     }
 
+    pub fn unwrap_input_consumed_once(self) -> Option<isize> {
+        match self.unwrap_once() {
+            (None, x) => x,
+            (Some(unconsumed), _) => unreachable!("Input {} was not consumed", unconsumed),
+        }
+    }
+
     pub fn unwrap_once(self) -> (Option<isize>, Option<isize>) {
         match self {
             Environment::Once(input, output) => (input, output),
@@ -514,9 +521,8 @@ mod tests {
 
         Program::wrap_and_eval_with_env(&mut prog, &mut env, &Config::day05()).unwrap();
 
-        let (input, output) = env.unwrap_once();
+        let output = env.unwrap_input_consumed_once();
 
-        assert_eq!(input, None);
         assert_eq!(output, Some(1));
         assert_eq!(&prog[..], expected);
     }
