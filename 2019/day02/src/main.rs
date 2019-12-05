@@ -1,45 +1,26 @@
-use std::convert::TryFrom;
 use std::io::BufRead;
 use std::str::FromStr;
+
+use intcode::Program;
 
 fn main() {
     let stdin = std::io::stdin();
     let locked = stdin.lock();
 
-    let mut data = vec![];
-
-    for (line_num, line) in locked.lines().enumerate() {
-        match line {
-            Ok(line) => {
-                for part in line.split(',') {
-                    match isize::from_str(part) {
-                        Ok(val) => data.push(val),
-                        Err(e) => {
-                            eprintln!("Bad input at line {}: \"{}\" ({})", line_num, line, e);
-                            std::process::exit(1);
-                        }
-                    }
-
-                }
-            },
-            Err(e) => {
-                eprintln!("Failed to read stdin near line {}: {}", line_num, e);
-                std::process::exit(1);
-            },
+    let data = match parse_program(locked) {
+        Ok(data) => data,
+        Err(ParsingError::Io(e, line)) => {
+            eprintln!("Failed to read stdin near line {}: {}", line, e);
+            std::process::exit(1);
+        },
+        Err(ParsingError::Int(e, line, raw)) => {
+            eprintln!("Bad input at line {}: \"{}\" ({})", line, raw, e);
+            std::process::exit(1);
         }
-    }
+    };
 
-    // stage1
     {
-        let mut data = Vec::clone(&data);
-
-        // restore
-        data[1] = 12;
-        data[2] = 2;
-
-        Program::wrap_and_eval(&mut data);
-
-        println!("Value at position 0: {}", data[0]);
+        println!("Value at position 0: {}", stage1(&data));
     }
 
     {
@@ -51,7 +32,56 @@ fn main() {
             println!("Did not find...");
         }
     }
+}
 
+fn stage1(data: &[isize]) -> isize {
+    let mut data = data.to_vec();
+
+    // restore
+    data[1] = 12;
+    data[2] = 2;
+
+    Program::wrap_and_eval(&mut data);
+    data[0]
+}
+
+#[derive(Debug)]
+enum ParsingError {
+    Io(std::io::Error, usize),
+    Int(std::num::ParseIntError, usize, String),
+}
+
+fn parse_program<R: BufRead>(mut r: R) -> Result<Vec<isize>, ParsingError> {
+    let mut data = vec![];
+    let mut buffer = String::new();
+    let mut line = 0;
+
+    loop {
+        buffer.clear();
+        let bytes = r
+            .read_line(&mut buffer)
+            .map_err(|e| ParsingError::Io(e, line))?;
+
+        if bytes == 0 {
+            return Ok(data);
+        }
+
+        let parts = buffer
+            .trim()
+            .split(',')
+            .map(isize::from_str);
+
+        for part in parts {
+            let part = match part {
+                Ok(part) => part,
+                Err(e) => return Err(ParsingError::Int(e, line, buffer)),
+            };
+
+            data.push(part);
+        }
+
+        line += 1;
+    }
 }
 
 fn find_coords(input: &[isize], magic: isize) -> Option<(isize, isize)> {
@@ -76,116 +106,31 @@ fn find_coords(input: &[isize], magic: isize) -> Option<(isize, isize)> {
     None
 }
 
-enum OpCode {
-    BinOp(BinOp),
-    Halt,
+#[test]
+fn full_stage1() {
+    with_day02_input(|data| {
+        assert_eq!(stage1(data), 3224742);
+    });
 }
-
-impl OpCode {
-    fn len(&self) -> usize {
-        match *self {
-            OpCode::BinOp(_) => 4,
-            OpCode::Halt => 1,
-        }
-    }
-}
-
-#[derive(Debug)]
-enum BinOp {
-    Add,
-    Mul,
-}
-
-impl BinOp {
-    fn eval(&self, lhs: isize, rhs: isize) -> isize {
-        match *self {
-            BinOp::Add => lhs.checked_add(rhs).expect("Add overflow"),
-            BinOp::Mul => lhs.checked_mul(rhs).expect("Mul overflow"),
-        }
-    }
-}
-
-struct UnknownOpCode(isize);
-
-impl TryFrom<isize> for OpCode {
-    type Error = UnknownOpCode;
-    fn try_from(u: isize) -> Result<Self, Self::Error> {
-        Ok(match u {
-            1 => OpCode::BinOp(BinOp::Add),
-            2 => OpCode::BinOp(BinOp::Mul),
-            99 => OpCode::Halt,
-            x => { return Err(UnknownOpCode(x)); },
-        })
-    }
-}
-
-struct Program<'a> {
-    prog: &'a mut [isize],
-}
-
-impl<'a> Program<'a> {
-    fn indirect_value(&self, index: usize) -> isize {
-        let index = index % self.prog.len();
-        let addr = self.prog[index];
-        assert!(addr >= 0);
-        let val = self.prog[addr as usize];
-        val
-    }
-
-    fn indirect_store(&mut self, index: usize, value: isize) {
-        let index = index % self.prog.len();
-        let addr = self.prog[index];
-        assert!(addr >= 0);
-        // probably shouldn't panic?
-        self.prog[addr as usize] = value;
-    }
-
-    fn eval(&mut self) {
-        let mut ip = 0;
-        loop {
-            let skipped = match OpCode::try_from(self.prog[ip]) {
-                Ok(OpCode::Halt) => return,
-                Ok(OpCode::BinOp(b)) => {
-
-                    let res = b.eval(
-                        self.indirect_value(ip + 1),
-                        self.indirect_value(ip + 2));
-
-                    self.indirect_store(ip + 3, res);
-
-                    OpCode::BinOp(b).len()
-                },
-                Err(_) => {
-                    panic!("Invalid opcode at {}: {}", ip, self.prog[ip]);
-                }
-            };
-
-            ip = (ip + skipped) % self.prog.len();
-        }
-    }
-
-    fn wrap_and_eval(data: &mut [isize]) {
-        let mut p = Program { prog: data };
-        p.eval();
-    }
-}
-
 
 #[test]
-fn stage1_example() {
-    let mut prog = vec![
-        1, 9, 10, 3,
-        2, 3, 11, 0,
-        99,
-        30, 40, 50];
+fn full_stage2() {
+    with_day02_input(|data| {
+        let magic = 19690720;
+        let res = find_coords(data, magic)
+            .map(|(noun, verb)| 100 * noun + verb);
+        assert_eq!(res, Some(7960));
+    });
+}
 
-    let expected = &[
-        3500isize, 9, 10, 70,
-        2, 3, 11, 0,
-        99,
-        30, 40, 50];
+#[cfg(test)]
+fn with_day02_input<V, F: FnOnce(&[isize]) -> V>(f: F) -> V {
+    use std::io::BufReader;
 
-    Program::wrap_and_eval(&mut prog);
+    let file = std::fs::File::open("input")
+        .expect("Could not open day02 input?");
 
-    assert_eq!(&prog[..], expected);
+    let data = parse_program(BufReader::new(file)).unwrap();
+
+    f(&data)
 }
