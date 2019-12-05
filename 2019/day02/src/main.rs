@@ -1,7 +1,4 @@
-use std::io::BufRead;
-use std::str::FromStr;
-
-use intcode::{Program, Config};
+use intcode::{Program, Config, parse_program, ParsingError};
 
 fn main() {
     let stdin = std::io::stdin();
@@ -44,45 +41,6 @@ fn stage1(data: &[isize]) -> isize {
     Program::wrap_and_eval(&mut data, &Config::default())
         .expect("Invalid program");
     data[0]
-}
-
-#[derive(Debug)]
-enum ParsingError {
-    Io(std::io::Error, usize),
-    Int(std::num::ParseIntError, usize, String),
-}
-
-fn parse_program<R: BufRead>(mut r: R) -> Result<Vec<isize>, ParsingError> {
-    let mut data = vec![];
-    let mut buffer = String::new();
-    let mut line = 0;
-
-    loop {
-        buffer.clear();
-        let bytes = r
-            .read_line(&mut buffer)
-            .map_err(|e| ParsingError::Io(e, line))?;
-
-        if bytes == 0 {
-            return Ok(data);
-        }
-
-        let parts = buffer
-            .trim()
-            .split(',')
-            .map(isize::from_str);
-
-        for part in parts {
-            let part = match part {
-                Ok(part) => part,
-                Err(e) => return Err(ParsingError::Int(e, line, buffer)),
-            };
-
-            data.push(part);
-        }
-
-        line += 1;
-    }
 }
 
 fn find_coords(input: &[isize], magic: isize) -> Option<(isize, isize)> {
