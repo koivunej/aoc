@@ -71,6 +71,7 @@ impl ParameterModes {
         self.modes.get(index).unwrap_or(&DEFAULT_PARAMETER_MODE)
     }
 
+    #[allow(dead_code)]
     fn is_default(&self) -> bool {
         // when none were specified we have only defaults
         self.modes.is_empty()
@@ -204,7 +205,7 @@ pub struct Config {
 }
 
 impl Config {
-    fn day05() -> Self {
+    pub fn day05() -> Self {
         Config {
             allow_op3: true,
             allow_op4: true,
@@ -239,6 +240,7 @@ impl Config {
 pub enum Environment {
     NoIO,
     Once(Option<isize>, Option<isize>),
+    Collector(Option<isize>, Vec<isize>),
 }
 
 impl std::default::Default for Environment {
@@ -251,7 +253,8 @@ impl Environment {
     fn input(&mut self, ip: usize) -> Result<isize, InvalidProgram> {
         match *self {
             Environment::NoIO => Err((ip, ProgramError::NoMoreInput).into()),
-            Environment::Once(ref mut input, _) => {
+            Environment::Once(ref mut input, _)
+            | Environment::Collector(ref mut input, _) => {
                 input.take()
                     .ok_or_else(|| (ip, ProgramError::NoMoreInput).into())
             }
@@ -268,14 +271,30 @@ impl Environment {
                     *output = Some(value);
                     Ok(())
                 }
-            }
+            },
+            Environment::Collector(_, ref mut collected) => Ok(collected.push(value)),
         }
     }
 
-    fn unwrap_once(self) -> (Option<isize>, Option<isize>) {
+    pub fn once(input: Option<isize>) -> Self {
+        Self::Once(input, None)
+    }
+
+    pub fn collector(input: Option<isize>) -> Self {
+        Self::Collector(input, Vec::new())
+    }
+
+    pub fn unwrap_once(self) -> (Option<isize>, Option<isize>) {
         match self {
             Environment::Once(input, output) => (input, output),
-            x => unreachable!("Was not once: was {:?}", x),
+            x => unreachable!("Was not once: {:?}", x),
+        }
+    }
+
+    pub fn unwrap_collected(self) -> Vec<isize> {
+        match self {
+            Environment::Collector(_, collected) => collected,
+            x => unreachable!("Was not collector: {:?}", x),
         }
     }
 }
@@ -360,7 +379,6 @@ pub enum ParsingError {
 }
 
 pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<isize>, ParsingError> {
-    use std::io::BufRead;
     use std::str::FromStr;
 
     let mut data = vec![];
