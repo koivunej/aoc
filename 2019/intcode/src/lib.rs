@@ -127,17 +127,6 @@ impl ParameterMode {
     }
 }
 
-impl OpCode {
-    fn len(&self) -> usize {
-        match *self {
-            OpCode::BinOp(_) => 4,
-            OpCode::Store => 2,
-            OpCode::Print => 2,
-            OpCode::Halt => 1,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub enum BinOp {
     Add,
@@ -329,7 +318,7 @@ impl<'a> Program<'a> {
 
                     third.store(res, self.prog[ip + 3], &mut self.prog);
 
-                    OpCode::BinOp(b).len()
+                    4
                 },
                 OpCode::Store => {
 
