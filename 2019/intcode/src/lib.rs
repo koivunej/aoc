@@ -33,8 +33,8 @@ struct ParameterModes {
 impl TryFrom<isize> for ParameterModes {
     type Error = ();
 
-    fn try_from(data: isize) -> Result<ParameterModes, Self::Error> {
-        if data < 100 {
+    fn try_from(raw: isize) -> Result<ParameterModes, Self::Error> {
+        if !Self::instruction_has_modes(raw) {
             Ok(ParameterModes { modes: SmallVec::new() })
         } else {
             unimplemented!();
@@ -47,6 +47,15 @@ static DEFAULT_PARAMETER_MODE: ParameterMode = ParameterMode::Address;
 impl ParameterModes {
     fn mode(&self, index: usize) -> &ParameterMode {
         self.modes.get(index).unwrap_or(&DEFAULT_PARAMETER_MODE)
+    }
+
+    fn is_default(&self) -> bool {
+        // when none were specified we have only defaults
+        self.modes.is_empty()
+    }
+
+    fn instruction_has_modes(raw: isize) -> bool {
+        raw > 100
     }
 }
 
@@ -140,10 +149,15 @@ impl From<(usize, UnknownOpCode)> for InvalidProgram {
 pub struct Config {
     allow_op3: bool,
     allow_op4: bool,
+    parameter_modes: bool,
 }
 
 impl Config {
-    fn validate(&self, ip: usize, op: Result<OpCode, UnknownOpCode>) -> Result<OpCode, InvalidProgram> {
+    fn validate(&self, raw: isize, ip: usize, op: Result<OpCode, UnknownOpCode>) -> Result<OpCode, InvalidProgram> {
+        if !self.parameter_modes && ParameterModes::instruction_has_modes(raw) {
+            return Err((ip, UnknownOpCode(raw)).into());
+        }
+
         match (op, self.allow_op3, self.allow_op4) {
             (Ok(x @ OpCode::Halt), _, _)
             | (Ok(x @ OpCode::BinOp(_)), _, _) => Ok(x),
@@ -170,13 +184,14 @@ impl<'a> Program<'a> {
     fn eval(&mut self, config: &Config) -> Result<usize, InvalidProgram> {
         let mut ip = 0;
         loop {
-            let next = OpCode::try_from(self.prog[ip]);
-            let next = config.validate(ip, next)?;
+            let op = self.prog[ip];
+            let next = OpCode::try_from(op);
+            let next = config.validate(op, ip, next)?;
             let skipped = match next {
                 OpCode::Halt => return Ok(ip),
                 OpCode::BinOp(b) => {
 
-                    let pvs = ParameterModes::try_from(self.prog[ip])
+                    let pvs = ParameterModes::try_from(op)
                         .expect("Failed to deduce parameter modes");
 
                     let first = pvs.mode(0);
