@@ -144,7 +144,8 @@ impl TryFrom<isize> for Operation {
             .map_err(|_| DecodingError::TooManyParameters(raw))?;
 
         if op.only_default_parameters() {
-            pvs = pvs.all_must_equal_default()
+            pvs = pvs
+                .all_must_equal_default()
                 .map_err(|_| DecodingError::InvalidParameterMode(raw))?;
         }
 
@@ -178,7 +179,8 @@ impl ParameterModes {
     fn at_most(mut self, count: usize) -> Result<Self, ()> {
         use std::iter::repeat;
         if self.modes.len() <= count {
-            self.modes.extend(repeat(DEFAULT_PARAMETER_MODE).take(count - self.modes.len()));
+            self.modes
+                .extend(repeat(DEFAULT_PARAMETER_MODE).take(count - self.modes.len()));
             Ok(self)
         } else {
             Err(())
@@ -353,9 +355,7 @@ enum State {
 }
 
 impl<'a> Program<'a> {
-
     fn step(&mut self, ip: usize) -> Result<State, InvalidProgram> {
-
         let Operation(op, pvs, _) = self.decode(ip)?;
 
         let ip = match op {
@@ -367,7 +367,8 @@ impl<'a> Program<'a> {
 
                 let res = b.eval(
                     first.eval(self.mem[ip + 1], &self.mem),
-                    second.eval(self.mem[ip + 2], &self.mem));
+                    second.eval(self.mem[ip + 2], &self.mem),
+                );
 
                 third.store(res, self.mem[ip + 3], &mut self.mem);
 
@@ -382,7 +383,8 @@ impl<'a> Program<'a> {
             }
             OpCode::Print => {
                 let source = pvs.mode(0);
-                self.env.output(ip, source.eval(self.mem[ip + 1], &self.mem))?;
+                self.env
+                    .output(ip, source.eval(self.mem[ip + 1], &self.mem))?;
 
                 ip + 2
             }
@@ -440,7 +442,11 @@ impl<'a> Program<'a> {
         env: &mut Environment,
         config: &Config,
     ) -> Result<usize, InvalidProgram> {
-        let mut p = Program { mem: data, env, config };
+        let mut p = Program {
+            mem: data,
+            env,
+            config,
+        };
         p.eval()
     }
 }
