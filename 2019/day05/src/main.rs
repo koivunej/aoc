@@ -1,6 +1,5 @@
 use intcode::{Program, Config, Environment, parse_program, ParsingError};
 
-
 fn main() {
     let stdin = std::io::stdin();
     let locked = stdin.lock();
@@ -17,9 +16,8 @@ fn main() {
         }
     };
 
-    {
-        println!("stage1: {:?}", stage1(&data));
-    }
+    println!("stage1: {:?}", stage1(&data));
+    println!("stage2: {:?}", stage2(&data));
 }
 
 fn stage1(data: &[isize]) -> isize {
@@ -31,6 +29,17 @@ fn stage1(data: &[isize]) -> isize {
 
     let output = env.unwrap_collected();
     *output.last().expect("No output?")
+}
+
+fn stage2(data: &[isize]) -> isize {
+    let mut data = data.to_vec();
+    let mut env = Environment::once(Some(5));
+
+    Program::wrap_and_eval_with_env(data.as_mut_slice(), &mut env, &Config::day05())
+        .unwrap();
+
+    let (_, output) = env.unwrap_once();
+    output.expect("No output?")
 }
 
 #[test]
