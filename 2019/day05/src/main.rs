@@ -45,6 +45,11 @@ fn full_stage1() {
     with_input(|data| assert_eq!(stage1(data), 9938601));
 }
 
+#[test]
+fn full_stage2() {
+    with_input(|data| assert_eq!(stage2(data), 4283952));
+}
+
 // FIXME: copied from day02, should refactor this into some test-support
 #[cfg(test)]
 fn with_input<V, F: FnOnce(&[isize]) -> V>(f: F) -> V {
