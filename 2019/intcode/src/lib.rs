@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use smallvec::SmallVec;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum OpCode {
     BinOp(BinOp),
     Store,
@@ -10,12 +10,13 @@ pub enum OpCode {
 }
 
 #[doc(hidden)]
+#[derive(Debug)]
 pub struct UnknownOpCode(isize);
 
 impl TryFrom<isize> for OpCode {
     type Error = UnknownOpCode;
     fn try_from(u: isize) -> Result<Self, Self::Error> {
-        Ok(match u {
+        Ok(match u % 100 {
             1 => OpCode::BinOp(BinOp::Add),
             2 => OpCode::BinOp(BinOp::Mul),
             3 => OpCode::Store,
@@ -30,8 +31,14 @@ struct ParameterModes {
     modes: SmallVec<[ParameterMode; 4]>,
 }
 
+#[derive(Debug)]
+enum ParameterModeError {
+    NegativeOpCode,
+    InvalidMode(isize),
+}
+
 impl TryFrom<isize> for ParameterModes {
-    type Error = ();
+    type Error = ParameterModeError;
 
     fn try_from(raw: isize) -> Result<ParameterModes, Self::Error> {
         if !Self::instruction_has_modes(raw) {
@@ -41,8 +48,8 @@ impl TryFrom<isize> for ParameterModes {
             let mut pm = ParameterModes { modes: SmallVec::new() };
             while shifted > 0 {
                 let rem = shifted % 10;
-                if shifted > 1 {
-                    return Err(());
+                if rem > 1 {
+                    return Err(ParameterModeError::InvalidMode(rem));
                 }
                 pm.modes.push(
                     if rem == 1 { ParameterMode::Immediate } else { ParameterMode::Address }
@@ -52,7 +59,7 @@ impl TryFrom<isize> for ParameterModes {
             }
             Ok(pm)
         } else {
-            Err(())
+            Err(ParameterModeError::NegativeOpCode)
         }
     }
 }
@@ -130,7 +137,7 @@ impl OpCode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum BinOp {
     Add,
     Mul,
@@ -228,6 +235,7 @@ impl Config {
     }
 }
 
+#[derive(Debug)]
 pub enum Environment {
     NoIO,
     Once(Option<isize>, Option<isize>),
@@ -261,6 +269,13 @@ impl Environment {
                     Ok(())
                 }
             }
+        }
+    }
+
+    fn unwrap_once(self) -> (Option<isize>, Option<isize>) {
+        match self {
+            Environment::Once(input, output) => (input, output),
+            x => unreachable!("Was not once: was {:?}", x),
         }
     }
 }
@@ -340,7 +355,8 @@ impl<'a> Program<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Program, Config, Environment};
+    use std::convert::TryFrom;
+    use super::{Program, Config, Environment, OpCode, BinOp, ParameterModes, ParameterMode};
 
     #[test]
     fn stage1_example() {
@@ -371,13 +387,22 @@ mod tests {
 
         Program::wrap_and_eval_with_env(&mut prog, &mut env, &Config::day05()).unwrap();
 
-        let (input, output) = match env {
-            Environment::Once(input, output) => (input, output),
-            _ => unreachable!(),
-        };
+        let (input, output) = env.unwrap_once();
 
         assert_eq!(input, None);
         assert_eq!(output, Some(1));
         assert_eq!(&prog[..], expected);
+    }
+
+    #[test]
+    fn parse_opcode_with_modes() {
+        let input = 1002;
+
+        assert_eq!(OpCode::try_from(input).unwrap(), OpCode::BinOp(BinOp::Mul));
+
+        let pm = ParameterModes::try_from(input).unwrap();
+        assert_eq!(pm.mode(0), &ParameterMode::Address);
+        assert_eq!(pm.mode(1), &ParameterMode::Immediate);
+        assert_eq!(pm.mode(2), &ParameterMode::Address);
     }
 }
