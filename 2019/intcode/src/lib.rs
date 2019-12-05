@@ -283,7 +283,7 @@ impl Environment {
             Environment::Collector(_, ref mut collected) => {
                 collected.push(value);
                 Ok(())
-            },
+            }
         }
     }
 
@@ -454,9 +454,7 @@ pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<isize>, Parsin
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        BinOp, Config, Environment, OpCode, ParameterMode, ParameterModes, Program,
-    };
+    use super::{BinOp, Config, Environment, OpCode, ParameterMode, ParameterModes, Program};
     use std::convert::TryFrom;
 
     #[test]
