@@ -322,11 +322,8 @@ enum State {
 impl<'a> Program<'a> {
 
     fn step(&mut self, ip: usize) -> Result<State, InvalidProgram> {
-        let op = self.mem[ip];
 
-        let Operation(op, pvs, _) = Operation::try_from(op)
-            .map_err(|dec| (ip, ProgramError::Decoding(dec)).into())
-            .and_then(|op| self.config.validate(ip, op))?;
+        let Operation(op, pvs, _) = self.decode(ip)?;
 
         let ip = match op {
             OpCode::Halt => return Ok(State::HaltedAt(ip)),
@@ -390,6 +387,12 @@ impl<'a> Program<'a> {
         };
 
         Ok(State::Running(ip))
+    }
+
+    fn decode(&self, ip: usize) -> Result<Operation, InvalidProgram> {
+        Operation::try_from(self.mem[ip])
+            .map_err(|dec| (ip, ProgramError::Decoding(dec)).into())
+            .and_then(|op| self.config.validate(ip, op))
     }
 
     fn eval(&mut self) -> Result<usize, InvalidProgram> {
