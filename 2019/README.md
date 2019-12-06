@@ -18,3 +18,12 @@ Day5: Crate extraction practice. Using types and whatnot paying off with
 `intcode`, succeeded at first submissions. Possibly need to extract another
 crate as currently the "read 'input' file and test with it" code is copypasted
 for `day02` and `day05`.
+
+Went way too far with this and prototyped a `tracing` feature which would allow
+another type to wrap the traits at top-level of `intcode` ... Turned out not so
+pretty but still a lot of learning.
+
+Day6: Used `petgraph` which turned out quite difficult. Hard to understand why
+you can't take a directed graph and view it as undirected? Also needed to
+rebase [an older PR](https://github.com/petgraph/petgraph/pull/151) to get the
+transitive closure algorithm.
