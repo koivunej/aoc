@@ -1,11 +1,14 @@
 use crate::error::ProgramError;
 use crate::IO;
 
+use std::collections::VecDeque;
+
 #[derive(Debug)]
 pub enum Environment {
     NoIO,
     Once(Option<isize>, Option<isize>),
     Collector(Option<isize>, Vec<isize>),
+    ManyMany(VecDeque<isize>, Vec<isize>),
 }
 
 impl std::default::Default for Environment {
@@ -16,12 +19,17 @@ impl std::default::Default for Environment {
 
 impl Environment {
     fn input(&mut self) -> Result<isize, ProgramError> {
-        match *self {
+        let ret = match *self {
             Environment::NoIO => Err(ProgramError::NoMoreInput),
-            Environment::Once(ref mut input, _) | Environment::Collector(ref mut input, _) => input
+            Environment::Once(ref mut input, _)
+                | Environment::Collector(ref mut input, _) => input
                 .take()
                 .ok_or(ProgramError::NoMoreInput),
-        }
+            Environment::ManyMany(ref mut input, _) =>
+                input.pop_front()
+                    .ok_or(ProgramError::NoMoreInput),
+        };
+        ret
     }
 
     fn output(&mut self, value: isize) -> Result<(), ProgramError> {
@@ -35,7 +43,8 @@ impl Environment {
                     Ok(())
                 }
             }
-            Environment::Collector(_, ref mut collected) => {
+            Environment::Collector(_, ref mut collected)
+            | Environment::ManyMany(_, ref mut collected) => {
                 collected.push(value);
                 Ok(())
             }
@@ -48,6 +57,11 @@ impl Environment {
 
     pub fn collector(input: Option<isize>) -> Self {
         Self::Collector(input, Vec::new())
+    }
+
+    /// Inputs will be consumed with inputs.pop_front()
+    pub fn collected_with_many_inputs(inputs: VecDeque<isize>) -> Self {
+        Self::ManyMany(inputs, Vec::new())
     }
 
     pub fn unwrap_input_consumed_once(self) -> Option<isize> {
@@ -66,7 +80,14 @@ impl Environment {
 
     pub fn unwrap_collected(self) -> Vec<isize> {
         match self {
-            Environment::Collector(_, collected) => collected,
+            Environment::Collector(input, collected) => {
+                assert!(input.is_none());
+                collected
+            }
+            Environment::ManyMany(inputs, collected) => {
+                assert!(inputs.is_empty());
+                collected
+            }
             x => unreachable!("Was not collector: {:?}", x),
         }
     }
