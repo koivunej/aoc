@@ -115,11 +115,12 @@ impl<'a> CombinedMachine<'a> {
         //                                       \--> output
         //
 
-
+        // send out the phase settings first
         settings.iter()
             .zip(channels.iter().map(|(tx, _)| tx.as_ref().unwrap()))
             .for_each(|(phase, tx)| tx.send(*phase).unwrap());
 
+        // keep this for now, lets start everything up before seeding
         let seeder = channels[0].0.as_ref().cloned().unwrap();
 
         let join_handles = range.clone()
@@ -175,7 +176,9 @@ impl<'a> CombinedMachine<'a> {
             }))
             .collect::<Vec<_>>();
 
+        // everyone is up and running, hopefully blocking soon, seed the first
         seeder.send(seed).unwrap();
+        // no need to keep the channel up for us
         drop(seeder);
 
         join_handles.into_iter()
@@ -184,6 +187,7 @@ impl<'a> CombinedMachine<'a> {
             .map(|(tid, res)| match res {
                 Ok(x) => x,
                 Err(e) => {
+                    // this is always "Any" so not really helpful
                     panic!("{}: returned error of type {:?}", tid, e);
                 }
             })
