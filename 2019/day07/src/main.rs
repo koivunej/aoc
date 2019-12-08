@@ -194,6 +194,12 @@ impl<'a> CombinedMachine<'a> {
 
 struct PhaseSettings(Vec<isize>);
 
+impl AsRef<[isize]> for PhaseSettings {
+    fn as_ref(&self) -> &[isize] {
+        self.0.as_ref()
+    }
+}
+
 #[derive(Debug)]
 enum InvalidPhaseSettings {
     WrongNumber,
@@ -209,22 +215,38 @@ impl TryFrom<Vec<isize>> for PhaseSettings {
             return Err(InvalidPhaseSettings::WrongNumber);
         }
 
+        let mut min = None;
+        let mut max = None;
+
+        for x in v.iter() {
+            let x = *x;
+            min = min.map(|m: isize| m.min(x)).or_else(|| Some(x));
+            max = max.map(|m: isize| m.max(x)).or_else(|| Some(x));
+        }
+
+        let min = min.expect("Length already checked, there must be minimum");
+        let max = max.expect("Length already checked, there must be maximum");
+
+        if max - min != 4 {
+            return Err(InvalidPhaseSettings::OutOfRange);
+        }
+
         v.iter()
             .try_fold([false; 5], |mut acc, next| {
 
             let next = *next;
 
-            if next < 0 || next > 4 {
+            if next < 0 {
                 return Err(InvalidPhaseSettings::OutOfRange);
             }
 
-            let next = next as usize;
+            let index = (next - min) as usize;
 
-            if acc[next] {
+            if acc[index] {
                 return Err(InvalidPhaseSettings::Duplicates);
             }
 
-            acc[next] = true;
+            acc[index] = true;
             Ok(acc)
         })?;
 
