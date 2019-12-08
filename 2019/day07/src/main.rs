@@ -13,6 +13,7 @@ fn main() {
     }
 
     println!("stage1: {}", find_max_output(0, &program[..]));
+    println!("stage2: {}", find_max_feedback_output(0, &program[..]));
 }
 
 fn find_max_output(seed: isize, program: &[isize]) -> isize {
@@ -22,6 +23,16 @@ fn find_max_output(seed: isize, program: &[isize]) -> isize {
     permutohedron::Heap::new(&mut data).into_iter()
         .map(|settings| PhaseSettings::try_from(settings.to_vec()).unwrap())
         .map(move |settings| combined.in_sequence(seed, &(settings.0)[..]))
+        .max()
+        .unwrap()
+}
+
+fn find_max_feedback_output(seed: isize, program: &[isize]) -> isize {
+    let combined = CombinedMachine::new(&program[..]);
+
+    let mut data = vec![5, 6, 7, 8, 9];
+    permutohedron::Heap::new(&mut data).into_iter()
+        .map(move |settings| combined.in_feedback_seq(seed, &settings[..]))
         .max()
         .unwrap()
 }
@@ -46,7 +57,7 @@ impl<'a> CombinedMachine<'a> {
 
         let ret = settings
             .iter()
-            .zip(repeat(self.program)) //
+            .zip(repeat(self.program))
             .enumerate()
             .scan(seed, move |input_signal, (index, (phase_setting, data))| {
                 tmp.clear();
@@ -76,15 +87,107 @@ impl<'a> CombinedMachine<'a> {
                 let outputs = env.unwrap_collected();
                 assert_eq!(outputs.len(), 1);
 
-                println!("{}: ({}, {}, _) => {}", index, phase_setting, input_signal, outputs[0]);
                 *input_signal = outputs[0];
-                Some(outputs[0])
+                Some(*input_signal)
             })
             .last()
             .unwrap();
 
-        println!("phases: {:?} output = {}", settings, ret);
         ret
+    }
+
+    fn in_feedback_seq(&self, seed: isize, settings: &[isize]) -> isize {
+        use std::iter::repeat;
+        use intcode::{Program, ExecutionState};
+        use std::sync::mpsc::{channel, TryRecvError, SendError};
+
+        let count = settings.len();
+        let range = 0..count;
+
+        let mut channels = range.clone()
+            .map(|_| channel::<isize>())
+            .map(|(tx, rx)| (Some(tx), Some(rx)))
+            .collect::<Vec<_>>();
+
+        // seed -+-> 1 -> 2 -> 3 -> 4 -> 5 --+---\
+        //       \___________________________/   |
+        //                                       \--> output
+        //
+
+
+        settings.iter()
+            .zip(channels.iter().map(|(tx, _)| tx.as_ref().unwrap()))
+            .for_each(|(phase, tx)| tx.send(*phase).unwrap());
+
+        let seeder = channels[0].0.as_ref().cloned().unwrap();
+
+        let join_handles = range.clone()
+            .map(|index| (index + 1) % count)
+            .zip(range)
+            // output is always sent to next (index + 1), input is always read from index
+            .map(|(output_index, input_index)| (channels[output_index].0.take().unwrap(), channels[input_index].1.take().unwrap()))
+            // each have their own owned copy of the program
+            .zip(repeat(self.program).map(|p| p.to_vec()))
+            // each run in separate threads
+            .enumerate()
+            .map(|(tid, ((tx, rx), mut prog))| std::thread::spawn(move || {
+                let mut p = Program::wrap(&mut prog);
+                let mut ip = 0;
+                let mut last_output = None;
+                let mut remote_disconnected = false;
+                loop {
+                    ip = match p.eval_from_instruction(ip).unwrap() {
+                        ExecutionState::HaltedAt(_) => {
+                            return last_output.expect("Nothing was output?");
+                        },
+                        ExecutionState::InputIO(io) => {
+                            let read = match rx.try_recv() {
+                                Ok(read) => {
+                                    read
+                                },
+                                Err(TryRecvError::Empty) => {
+                                    let read = rx.recv().unwrap();
+                                    read
+                                },
+                                Err(TryRecvError::Disconnected) => {
+                                    panic!("{} was disconnected", tid);
+                                },
+                            };
+                            p.handle_input_completion(io, read).unwrap()
+                        }
+                        ExecutionState::OutputIO(io, val) => {
+                            last_output = Some(val);
+                            match tx.send(val) {
+                                Ok(_) => {},
+                                Err(SendError(_)) => {
+                                    // allow this to happen once; it does not always happen as the
+                                    // first one may still be alive when the message is sent but it
+                                    // will never consume it
+                                    assert!(!remote_disconnected);
+                                    remote_disconnected = true;
+                                }
+                            }
+                            p.handle_output_completion(io)
+                        }
+                    }
+                }
+            }))
+            .collect::<Vec<_>>();
+
+        seeder.send(seed).unwrap();
+        drop(seeder);
+
+        join_handles.into_iter()
+            .map(|jh| jh.join())
+            .enumerate()
+            .map(|(tid, res)| match res {
+                Ok(x) => x,
+                Err(e) => {
+                    panic!("{}: returned error of type {:?}", tid, e);
+                }
+            })
+            .last()
+            .unwrap()
     }
 }
 
@@ -134,3 +237,21 @@ fn stage1_example1() {
 
     assert_eq!(find_max_output(0, &program[..]), 43210);
 }
+
+#[test]
+fn stage2_example1() {
+    let program = &[3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5];
+
+    assert_eq!(find_max_feedback_output(0, &program[..]), 139629729);
+}
+
+#[test]
+fn stage2_example2() {
+    let program = &[3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10];
+
+    assert_eq!(find_max_feedback_output(0, &program[..]), 18216);
+}
+
+// TODO: check against input:
+// stage1: 212460
+// stage2: 21844737
