@@ -1,17 +1,34 @@
 use crate::env::Environment;
 use crate::{IO, DecodedOperation};
 use crate::error::{InvalidProgram, ProgramError};
-use crate::instr::{Operation, OpCode};
+use crate::instr::{Operation, OpCode, ParameterModes};
 use std::convert::TryFrom;
 
 pub struct Program<'a> {
     mem: &'a mut [isize],
-    env: &'a mut Environment,
 }
 
 enum State {
-    Running(usize),
+    Running(/* instruction_pointer */ usize),
+    WaitingInput(Input),
+    WaitingToOutput(Output, isize),
+    HaltedAt(/* instruction_pointer */ usize),
+}
+
+pub struct Input {
+    instruction_pointer: usize,
+    parameters: ParameterModes,
+}
+
+pub struct Output {
+    instruction_pointer: usize,
+    hidden: bool,
+}
+
+pub enum ExecutionState {
     HaltedAt(usize),
+    InputIO(Input),
+    OutputIO(Output, isize),
 }
 
 impl<'a> Program<'a> {
@@ -35,17 +52,11 @@ impl<'a> Program<'a> {
                 ip + 4
             }
             OpCode::Store => {
-                let target = pvs.mode(0);
-                let input = self.env.input()?;
-                target.write(input, self.mem[ip + 1], &mut self.mem)?;
-
-                ip + 2
+                return Ok(State::WaitingInput(Input { instruction_pointer: ip, parameters: pvs }));
             }
             OpCode::Print => {
                 let value = pvs.mode(0).read(self.mem[ip + 1], &self.mem)?;
-                self.env.output(value)?;
-
-                ip + 2
+                return Ok(State::WaitingToOutput(Output { instruction_pointer: ip, hidden: false }, value));
             }
             OpCode::Jump(cond) => {
                 let cmp = pvs.mode(0).read(self.mem[ip + 1], &self.mem)?;
@@ -87,14 +98,31 @@ impl<'a> Program<'a> {
         Ok(Operation::try_from(value)?)
     }
 
-    fn eval(&mut self) -> Result<usize, InvalidProgram> {
-        let mut ip = 0;
+    pub fn eval_from_instruction(&mut self, mut ip: usize) -> Result<ExecutionState, InvalidProgram> {
         loop {
             ip = match self.step(ip)? {
-                State::HaltedAt(ip) => return Ok(ip),
                 State::Running(jump_to) => jump_to,
+                State::HaltedAt(ip) => return Ok(ExecutionState::HaltedAt(ip)),
+                State::WaitingInput(io) => return Ok(ExecutionState::InputIO(io)),
+                State::WaitingToOutput(io, val) => return Ok(ExecutionState::OutputIO(io, val)),
             };
         }
+    }
+
+    pub fn handle_input_completion(&mut self, input: Input, value: isize) -> Result<usize, InvalidProgram> {
+        let Input { instruction_pointer: ip, parameters } = input;
+        parameters.mode(0).write(value, self.mem[ip + 1], &mut self.mem)
+            .map_err(|e| ProgramError::from(e).at(ip))?;
+        Ok(ip + 2)
+    }
+
+    pub fn handle_output_completion(&mut self, output: Output) -> usize {
+        let Output { instruction_pointer: ip, hidden: _hidden } = output;
+        ip + 2
+    }
+
+    pub fn wrap(mem: &'a mut [isize]) -> Program<'a> {
+        Program { mem }
     }
 
     /// Returns Ok(instruction_pointer) for the halt instruction
@@ -108,10 +136,28 @@ impl<'a> Program<'a> {
     ) -> Result<usize, InvalidProgram> {
         let mut p = Program {
             mem: data,
-            env,
         };
-        p.eval()
+        p.eval_with_env(env)
     }
+
+    fn eval_with_env(&mut self, env: &mut Environment) -> Result<usize, InvalidProgram> {
+        // I feel like this could be an instance property but it does not necessarily need to be?
+        let mut ip = 0;
+        loop {
+            ip = match self.eval_from_instruction(ip)? {
+                ExecutionState::HaltedAt(ip) => return Ok(ip),
+                ExecutionState::InputIO(io) => {
+                    let input = env.input().map_err(|e| e.at(io.instruction_pointer))?;
+                    self.handle_input_completion(io, input)?
+                },
+                ExecutionState::OutputIO(io, value) => {
+                    env.output(value).map_err(|e| e.at(io.instruction_pointer))?;
+                    self.handle_output_completion(io)
+                },
+            };
+        }
+    }
+
 }
 
 

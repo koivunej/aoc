@@ -1,6 +1,5 @@
 use crate::error::ProgramError;
 use crate::IO;
-
 use std::collections::VecDeque;
 
 #[derive(Debug)]

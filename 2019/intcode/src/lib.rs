@@ -7,7 +7,7 @@ mod exec;
 pub use error::*;
 pub use util::{ParsingError, parse_program};
 pub use env::Environment;
-pub use exec::Program;
+pub use exec::{Program, ExecutionState};
 
 trait IO {
     fn input(&mut self) -> Result<isize, ProgramError>;
