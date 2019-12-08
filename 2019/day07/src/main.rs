@@ -21,8 +21,8 @@ fn find_max_output(seed: isize, program: &[isize]) -> isize {
 
     let mut data = vec![0, 1, 2, 3, 4];
     permutohedron::Heap::new(&mut data).into_iter()
-        .map(|settings| PhaseSettings::try_from(settings.to_vec()).unwrap())
-        .map(move |settings| combined.in_sequence(seed, &(settings.0)[..]))
+        //.map(|settings| PhaseSettings::try_from(settings.to_vec()).unwrap())
+        .map(move |settings| combined.in_sequence(seed, settings.as_ref()))
         .max()
         .unwrap()
 }
@@ -32,7 +32,8 @@ fn find_max_feedback_output(seed: isize, program: &[isize]) -> isize {
 
     let mut data = vec![5, 6, 7, 8, 9];
     permutohedron::Heap::new(&mut data).into_iter()
-        .map(move |settings| combined.in_feedback_seq(seed, &settings[..]))
+        //.map(|settings| PhaseSettings::try_from(settings.to_vec()).unwrap())
+        .map(move |settings| combined.in_feedback_seq(seed, settings.as_ref()))
         .max()
         .unwrap()
 }
