@@ -100,7 +100,8 @@ impl<'a> CombinedMachine<'a> {
     }
 
     fn in_feedback_seq(&self, seed: Word, settings: &[Word]) -> Word {
-        Strategy::ThreadedNaive.in_feedback_seq(self.program, seed, settings)
+        //Strategy::ThreadedNaive.in_feedback_seq(self.program, seed, settings)
+        Strategy::SingleThread.in_feedback_seq(self.program, seed, settings)
     }
 }
 
