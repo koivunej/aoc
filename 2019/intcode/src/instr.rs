@@ -21,7 +21,7 @@ impl OpCode {
             OpCode::Store => 1,
             OpCode::Print => 1,
             OpCode::Jump(_) => 2,
-            OpCode::StoreCompared(_) => 2,
+            OpCode::StoreCompared(_) => 3,
             OpCode::AdjustRelative => 1,
             OpCode::Halt => 0,
         }
@@ -244,7 +244,7 @@ impl BinOp {
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
-    use super::{BinOp, OpCode, ParameterMode, ParameterModes};
+    use super::{BinOp, OpCode, ParameterMode, ParameterModes, Operation};
 
     #[test]
     fn parse_opcode_with_modes() {
@@ -272,5 +272,12 @@ mod tests {
         let input = 9;
 
         assert_eq!(OpCode::try_from(input).unwrap(), OpCode::AdjustRelative);
+    }
+
+    #[test]
+    fn too_many() {
+        let input = 21108;
+
+        Operation::try_from(input).unwrap();
     }
 }
