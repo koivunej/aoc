@@ -1,6 +1,8 @@
+use crate::{Registers, Word};
+
 #[derive(Debug)]
 pub struct InvalidProgram {
-    pub instruction_pointer: usize,
+    registers: Registers,
     pub error: ProgramError,
 }
 
@@ -9,19 +11,19 @@ pub enum ProgramError {
     Decoding(DecodingError),
     NoMoreInput,
     CannotOutput,
-    NegativeJump(isize),
-    InvalidReadAddress(isize),
+    NegativeJump(Word),
+    InvalidReadAddress(Word),
     BadWrite(BadWrite),
 }
 
 #[derive(Debug)]
 pub enum DecodingError {
-    UnknownOpCode(isize),
-    InvalidParameterMode(isize),
-    TooManyParameters(isize),
+    UnknownOpCode(Word),
+    InvalidParameterMode(Word),
+    TooManyParameters(Word),
 }
 
-pub(crate) struct InvalidReadAddress(pub(crate) isize);
+pub(crate) struct InvalidReadAddress(pub(crate) Word);
 
 impl From<InvalidReadAddress> for ProgramError {
     fn from(InvalidReadAddress(addr): InvalidReadAddress) -> Self {
@@ -48,9 +50,9 @@ pub enum BadWrite {
 }
 
 impl ProgramError {
-    pub(crate) fn at(self, instruction_pointer: usize) -> InvalidProgram {
+    pub(crate) fn at(self, registers: Registers) -> InvalidProgram {
         InvalidProgram {
-            instruction_pointer,
+            registers,
             error: self,
         }
     }

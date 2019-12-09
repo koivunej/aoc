@@ -1,3 +1,4 @@
+use crate::{Registers, Word};
 use crate::env::Environment;
 use crate::{IO, DecodedOperation};
 use crate::error::{InvalidProgram, ProgramError};
@@ -5,133 +6,146 @@ use crate::instr::{Operation, OpCode, ParameterModes};
 use std::convert::TryFrom;
 
 pub struct Program<'a> {
-    mem: &'a mut [isize],
+    mem: &'a mut [Word],
 }
 
 enum State {
-    Running(/* instruction_pointer */ usize),
+    Running(Registers),
     WaitingInput(Input),
-    WaitingToOutput(Output, isize),
-    HaltedAt(/* instruction_pointer */ usize),
+    WaitingToOutput(Output, Word),
+    HaltedAt(Registers),
 }
 
 pub struct Input {
-    instruction_pointer: usize,
+    registers: Registers,
     parameters: ParameterModes,
 }
 
-pub struct Output {
-    instruction_pointer: usize,
-    hidden: bool,
+impl Input {
+    fn registers(&self) -> Registers { self.registers.clone() }
+}
+
+pub struct Output(Registers);
+
+impl Output {
+    fn registers(&self) -> Registers { self.0.clone() }
 }
 
 pub enum ExecutionState {
-    HaltedAt(usize),
+    HaltedAt(Registers),
     InputIO(Input),
-    OutputIO(Output, isize),
+    OutputIO(Output, Word),
+    // here could be paused for coop scheduling?
 }
 
 impl<'a> Program<'a> {
 
-    fn exec(&mut self, ip: usize, op: Operation) -> Result<State, ProgramError> {
+    fn exec(&mut self, regs: Registers, op: Operation) -> Result<State, ProgramError> {
         let (code, pvs) = op.unpack();
-        let ip = match code {
-            OpCode::Halt => return Ok(State::HaltedAt(ip)),
+        let regs = match code {
+            OpCode::Halt => return Ok(State::HaltedAt(regs)),
             OpCode::BinOp(b) => {
                 let first = pvs.mode(0);
                 let second = pvs.mode(1);
                 let third = pvs.mode(2);
 
                 let res = b.eval(
-                    first.read(self.mem[ip + 1], &self.mem)?,
-                    second.read(self.mem[ip + 2], &self.mem)?,
+                    first.read(self.mem[regs.ip_rel(1)], regs.relbase, &self.mem)?,
+                    second.read(self.mem[regs.ip_rel(2)], regs.relbase, &self.mem)?,
                 );
 
-                third.write(res, self.mem[ip + 3], &mut self.mem)?;
+                third.write(res, self.mem[regs.ip_rel(3)], regs.relbase, &mut self.mem)?;
 
-                ip + 4
+                regs.at_increment(4)
             }
             OpCode::Store => {
-                return Ok(State::WaitingInput(Input { instruction_pointer: ip, parameters: pvs }));
+                return Ok(State::WaitingInput(Input { registers: regs, parameters: pvs }));
             }
             OpCode::Print => {
-                let value = pvs.mode(0).read(self.mem[ip + 1], &self.mem)?;
-                return Ok(State::WaitingToOutput(Output { instruction_pointer: ip, hidden: false }, value));
+                let value = pvs.mode(0).read(self.mem[regs.ip_rel(1)], regs.relbase, &self.mem)?;
+                return Ok(State::WaitingToOutput(Output(regs), value));
             }
             OpCode::Jump(cond) => {
-                let cmp = pvs.mode(0).read(self.mem[ip + 1], &self.mem)?;
-                let target = pvs.mode(1).read(self.mem[ip + 2], &self.mem)?;
+                let cmp = pvs.mode(0).read(self.mem[regs.ip_rel(1)], regs.relbase, &self.mem)?;
+                let target = pvs.mode(1).read(self.mem[regs.ip_rel(2)], regs.relbase, &self.mem)?;
 
                 if cond.eval(cmp) {
                     if target < 0 {
                         return Err(ProgramError::NegativeJump(target));
                     }
-                    target as usize
+                    regs.at(target as usize)
                 } else {
-                    ip + 3
+                    regs.at_increment(3)
                 }
             }
             OpCode::StoreCompared(bincond) => {
-                let first = pvs.mode(0).read(self.mem[ip + 1], &self.mem)?;
-                let second = pvs.mode(1).read(self.mem[ip + 2], &self.mem)?;
+                let first = pvs.mode(0).read(self.mem[regs.ip_rel(1)], regs.relbase, &self.mem)?;
+                let second = pvs.mode(1).read(self.mem[regs.ip_rel(2)], regs.relbase, &self.mem)?;
                 let target = pvs.mode(2);
 
                 let res = if bincond.eval(first, second) { 1 } else { 0 };
-                target.write(res, self.mem[ip + 3], &mut self.mem)?;
+                target.write(res, self.mem[regs.ip_rel(3)], regs.relbase, &mut self.mem)?;
 
-                ip + 4
+                regs.at_increment(4)
+            },
+            OpCode::AdjustRelative => {
+                let added = pvs.mode(0).read(self.mem[regs.ip_rel(1)], regs.relbase, &self.mem)?;
+
+                regs.with_relbase_increment(added)
+                    .at_increment(2)
             }
         };
 
-        Ok(State::Running(ip))
+        Ok(State::Running(regs))
     }
 
-    fn step(&mut self, ip: usize) -> Result<State, InvalidProgram> {
-        self.mem.get(ip)
-            .ok_or_else(|| ProgramError::InvalidReadAddress(ip as isize))
+    fn step(&mut self, registers: Registers) -> Result<State, InvalidProgram> {
+        let reg_clone = registers.clone();
+        self.mem.get(registers.instruction_pointer())
+            .ok_or_else(|| ProgramError::InvalidReadAddress(registers.instruction_pointer() as Word))
             .and_then(|value| self.decode(*value))
-            .and_then(|op| self.exec(ip, op))
-            .map_err(|e| e.at(ip))
+            .and_then(move |op| self.exec(registers, op))
+            .map_err(|e| e.at(reg_clone))
     }
 
-    fn decode(&self, value: isize) -> Result<Operation, ProgramError> {
+    fn decode(&self, value: Word) -> Result<Operation, ProgramError> {
         Ok(Operation::try_from(value)?)
     }
 
-    pub fn eval_from_instruction(&mut self, mut ip: usize) -> Result<ExecutionState, InvalidProgram> {
+    pub fn eval_from_instruction(&mut self, mut regs: Registers) -> Result<ExecutionState, InvalidProgram> {
         loop {
-            ip = match self.step(ip)? {
-                State::Running(jump_to) => jump_to,
-                State::HaltedAt(ip) => return Ok(ExecutionState::HaltedAt(ip)),
+            regs = match self.step(regs)? {
+                State::Running(regs) => regs,
+                State::HaltedAt(regs) => return Ok(ExecutionState::HaltedAt(regs)),
                 State::WaitingInput(io) => return Ok(ExecutionState::InputIO(io)),
                 State::WaitingToOutput(io, val) => return Ok(ExecutionState::OutputIO(io, val)),
             };
         }
     }
 
-    pub fn handle_input_completion(&mut self, input: Input, value: isize) -> Result<usize, InvalidProgram> {
-        let Input { instruction_pointer: ip, parameters } = input;
-        parameters.mode(0).write(value, self.mem[ip + 1], &mut self.mem)
-            .map_err(|e| ProgramError::from(e).at(ip))?;
-        Ok(ip + 2)
+    pub fn handle_input_completion(&mut self, input: Input, value: Word) -> Result<Registers, InvalidProgram> {
+        let Input { registers: regs, parameters } = input;
+        parameters.mode(0)
+            .write(value, self.mem[regs.ip_rel(1)], regs.relbase, &mut self.mem)
+            .map_err(|e| ProgramError::from(e).at(regs.clone()))?;
+        Ok(regs.at_increment(2))
     }
 
-    pub fn handle_output_completion(&mut self, output: Output) -> usize {
-        let Output { instruction_pointer: ip, hidden: _hidden } = output;
-        ip + 2
+    pub fn handle_output_completion(&mut self, Output(regs): Output) -> Registers {
+        regs.at_increment(2)
     }
 
-    pub fn wrap(mem: &'a mut [isize]) -> Program<'a> {
+    pub fn wrap(mem: &'a mut [Word]) -> Program<'a> {
         Program { mem }
     }
 
     /// Returns Ok(instruction_pointer) for the halt instruction
-    pub fn wrap_and_eval(data: &mut [isize]) -> Result<usize, InvalidProgram> {
+    pub fn wrap_and_eval(data: &mut [Word]) -> Result<usize, InvalidProgram> {
         Self::wrap_and_eval_with_env(data, &mut Environment::default())
     }
 
     pub fn wrap_and_eval_with_env(
-        data: &mut [isize],
+        data: &mut [Word],
         env: &mut Environment,
     ) -> Result<usize, InvalidProgram> {
         let mut p = Program {
@@ -142,16 +156,16 @@ impl<'a> Program<'a> {
 
     fn eval_with_env(&mut self, env: &mut Environment) -> Result<usize, InvalidProgram> {
         // I feel like this could be an instance property but it does not necessarily need to be?
-        let mut ip = 0;
+        let mut regs = Registers::default();
         loop {
-            ip = match self.eval_from_instruction(ip)? {
-                ExecutionState::HaltedAt(ip) => return Ok(ip),
+            regs = match self.eval_from_instruction(regs)? {
+                ExecutionState::HaltedAt(regs) => return Ok(regs.instruction_pointer()),
                 ExecutionState::InputIO(io) => {
-                    let input = env.input().map_err(|e| e.at(io.instruction_pointer))?;
+                    let input = env.input().map_err(|e| e.at(io.registers()))?;
                     self.handle_input_completion(io, input)?
                 },
                 ExecutionState::OutputIO(io, value) => {
-                    env.output(value).map_err(|e| e.at(io.instruction_pointer))?;
+                    env.output(value).map_err(|e| e.at(io.registers()))?;
                     self.handle_output_completion(io)
                 },
             };

@@ -1,15 +1,16 @@
 use smallvec::SmallVec;
 use std::convert::TryFrom;
-use crate::{DecodingError, DecodedOperation, Params, Param, BadWrite};
+use crate::{DecodingError, DecodedOperation, Params, Param, BadWrite, Word};
 use crate::error::InvalidReadAddress;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum OpCode {
     BinOp(BinOp),
     Store,
     Print,
     Jump(UnaryCondition),
     StoreCompared(BinaryCondition),
+    AdjustRelative,
     Halt,
 }
 
@@ -21,6 +22,7 @@ impl OpCode {
             OpCode::Print => 1,
             OpCode::Jump(_) => 2,
             OpCode::StoreCompared(_) => 2,
+            OpCode::AdjustRelative => 1,
             OpCode::Halt => 0,
         }
     }
@@ -34,14 +36,14 @@ impl OpCode {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum UnaryCondition {
     OnTrue,
     OnFalse,
 }
 
 impl UnaryCondition {
-    pub(crate) fn eval(&self, first: isize) -> bool {
+    pub(crate) fn eval(&self, first: Word) -> bool {
         match *self {
             Self::OnTrue => first != 0,
             Self::OnFalse => first == 0,
@@ -49,14 +51,14 @@ impl UnaryCondition {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum BinaryCondition {
     OnLessThan,
     OnEq,
 }
 
 impl BinaryCondition {
-    pub(crate) fn eval(&self, first: isize, second: isize) -> bool {
+    pub(crate) fn eval(&self, first: Word, second: Word) -> bool {
         match *self {
             Self::OnLessThan => first < second,
             Self::OnEq => first == second,
@@ -65,9 +67,9 @@ impl BinaryCondition {
 }
 
 
-impl TryFrom<isize> for OpCode {
+impl TryFrom<Word> for OpCode {
     type Error = DecodingError;
-    fn try_from(u: isize) -> Result<Self, Self::Error> {
+    fn try_from(u: Word) -> Result<Self, Self::Error> {
         Ok(match u % 100 {
             1 => OpCode::BinOp(BinOp::Add),
             2 => OpCode::BinOp(BinOp::Mul),
@@ -77,6 +79,7 @@ impl TryFrom<isize> for OpCode {
             6 => OpCode::Jump(UnaryCondition::OnFalse),
             7 => OpCode::StoreCompared(BinaryCondition::OnLessThan),
             8 => OpCode::StoreCompared(BinaryCondition::OnEq),
+            9 => OpCode::AdjustRelative,
             99 => OpCode::Halt,
             x => {
                 return Err(DecodingError::UnknownOpCode(x));
@@ -85,7 +88,7 @@ impl TryFrom<isize> for OpCode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Operation(OpCode, ParameterModes);
 
 impl DecodedOperation for Operation {
@@ -98,10 +101,10 @@ impl DecodedOperation for Operation {
     fn default_parameters(&self) -> bool { self.1.is_default() }
 }
 
-impl TryFrom<isize> for Operation {
+impl TryFrom<Word> for Operation {
     type Error = DecodingError;
 
-    fn try_from(raw: isize) -> Result<Self, Self::Error> {
+    fn try_from(raw: Word) -> Result<Self, Self::Error> {
         if raw < 0 {
             return Err(DecodingError::UnknownOpCode(raw));
         }
@@ -121,15 +124,15 @@ impl TryFrom<isize> for Operation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct ParameterModes {
     modes: SmallVec<[ParameterMode; 4]>,
 }
 
-impl TryFrom<isize> for ParameterModes {
+impl TryFrom<Word> for ParameterModes {
     type Error = DecodingError;
 
-    fn try_from(raw: isize) -> Result<ParameterModes, Self::Error> {
+    fn try_from(raw: Word) -> Result<ParameterModes, Self::Error> {
         if !Self::instruction_has_modes(raw) {
             Ok(ParameterModes {
                 modes: SmallVec::new(),
@@ -140,14 +143,11 @@ impl TryFrom<isize> for ParameterModes {
                 modes: SmallVec::new(),
             };
             while shifted > 0 {
-                let rem = shifted % 10;
-                if rem > 1 {
-                    return Err(DecodingError::InvalidParameterMode(rem));
-                }
-                pm.modes.push(if rem == 1 {
-                    ParameterMode::Immediate
-                } else {
-                    ParameterMode::Address
+                pm.modes.push(match shifted % 10 {
+                    1 => ParameterMode::Immediate,
+                    0 => ParameterMode::Address,
+                    2 => ParameterMode::Relative,
+                    x => return Err(DecodingError::InvalidParameterMode(x)),
                 });
 
                 shifted /= 10;
@@ -178,7 +178,7 @@ impl ParameterModes {
         self.modes.is_empty() || self.modes.iter().all(|pm| pm == &DEFAULT_PARAMETER_MODE)
     }
 
-    fn instruction_has_modes(raw: isize) -> bool {
+    fn instruction_has_modes(raw: Word) -> bool {
         raw > 100
     }
 
@@ -206,48 +206,60 @@ impl ParameterModes {
 pub(crate) enum ParameterMode {
     Address,
     Immediate,
+    Relative,
 }
 
 impl ParameterMode {
-    pub(crate) fn read(self, arg: isize, program: &[isize]) -> Result<isize, InvalidReadAddress> {
+    pub(crate) fn read(self, arg: Word, relbase: Word, program: &[Word]) -> Result<Word, InvalidReadAddress> {
         match self {
-            ParameterMode::Address => {
-                assert!(arg >= 0);
-                program.get(arg as usize)
-                    .cloned()
-                    .ok_or(InvalidReadAddress(arg))
-            }
+            ParameterMode::Address => Self::read_at(arg, program),
             ParameterMode::Immediate => Ok(arg),
+            ParameterMode::Relative => Self::read_at(arg + relbase, program),
         }
     }
 
-    pub(crate) fn write(self, value: isize, arg: isize, program: &mut [isize]) -> Result<(), BadWrite> {
+    fn read_at(addr: Word, program: &[Word]) -> Result<Word, InvalidReadAddress> {
+        if addr < 0 {
+            return Err(InvalidReadAddress(addr));
+        }
+        program.get(addr as usize)
+            .cloned()
+            .ok_or(InvalidReadAddress(addr))
+    }
+
+    pub(crate) fn write(self, value: Word, arg: Word, relbase: Word, program: &mut [Word]) -> Result<(), BadWrite> {
         use BadWrite::*;
         match self {
-            ParameterMode::Address => {
-                assert!(arg >= 0);
-                let cell = program.get_mut(arg as usize).ok_or(AddressOutOfBounds)?;
-                *cell = value;
-                Ok(())
-            }
+            ParameterMode::Address => Self::write_at(value, arg, program),
             ParameterMode::Immediate => Err(ImmediateParameter),
+            ParameterMode::Relative => Self::write_at(value, arg + relbase, program),
         }
+    }
+
+    fn write_at(value: Word, addr: Word, program: &mut [Word]) -> Result<(), BadWrite> {
+        use BadWrite::*;
+        if addr < 0 {
+            return Err(AddressOutOfBounds);
+        }
+        let cell = program.get_mut(addr as usize).ok_or(AddressOutOfBounds)?;
+        *cell = value;
+        Ok(())
     }
 }
 
 impl Param for ParameterMode {
-    fn read(self, arg: isize, memory: &[isize]) -> Result<isize, InvalidReadAddress> { self.read(arg, memory) }
-    fn write(self, value: isize, arg: isize, memory: &mut [isize]) -> Result<(), BadWrite> { self.write(value, arg, memory) }
+    fn read(self, arg: Word, relbase: Word, memory: &[Word]) -> Result<Word, InvalidReadAddress> { self.read(arg, relbase, memory) }
+    fn write(self, value: Word, arg: Word, relbase: Word, memory: &mut [Word]) -> Result<(), BadWrite> { self.write(value, arg, relbase, memory) }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum BinOp {
     Add,
     Mul,
 }
 
 impl BinOp {
-    pub(crate) fn eval(&self, lhs: isize, rhs: isize) -> isize {
+    pub(crate) fn eval(&self, lhs: Word, rhs: Word) -> Word {
         match *self {
             BinOp::Add => lhs.checked_add(rhs).expect("Add overflow"),
             BinOp::Mul => lhs.checked_mul(rhs).expect("Mul overflow"),
@@ -272,4 +284,19 @@ mod tests {
         assert_eq!(pm.mode(2), &ParameterMode::Address);
     }
 
+    #[test]
+    fn relative_mode() {
+        let input = 204;
+
+        assert_eq!(OpCode::try_from(input).unwrap(), OpCode::Print);
+        let pm = ParameterModes::try_from(input).unwrap();
+        assert_eq!(pm.mode(0), &ParameterMode::Relative);
+    }
+
+    #[test]
+    fn relative_adjust_op() {
+        let input = 9;
+
+        assert_eq!(OpCode::try_from(input).unwrap(), OpCode::AdjustRelative);
+    }
 }
