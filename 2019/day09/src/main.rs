@@ -16,12 +16,13 @@ fn main() {
         }
     };
 
-    println!("stage1: {:?}", stage1(&data));
+    println!("stage1: {:?}", boost(&data, 1));
+    println!("stage2: {:?}", boost(&data, 2));
 }
 
-fn stage1(data: &[Word]) -> Word {
+fn boost(data: &[Word], input: Word) -> Word {
     let mut data = data.to_vec();
-    let mut env = Environment::once(Some(1));
+    let mut env = Environment::once(Some(input));
 
     Program::wrap(&mut data)
         .with_memory_expansion()
