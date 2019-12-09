@@ -1,9 +1,37 @@
 use crate::{Registers, Word};
 use crate::env::Environment;
 use crate::{IO, DecodedOperation};
-use crate::error::{InvalidProgram, ProgramError};
+use crate::error::{InvalidProgram, ProgramError, BadWrite, InvalidReadAddress};
 use crate::instr::{Operation, OpCode, ParameterModes};
 use std::convert::TryFrom;
+
+pub struct Memory<'a> {
+    mem: &'a mut [Word],
+    expansion: Option<Vec<Word>>, // None if expanded memory is not supported
+}
+
+impl<'a> Memory<'a> {
+    fn read(&self, addr: usize) -> Result<Word, InvalidReadAddress> {
+        if addr < self.mem.len() {
+            Ok(self.mem[addr])
+        } else if let Some(expanded) = self.expansion.as_ref() {
+            unimplemented!("Should read {}", addr);
+        } else {
+            Err(InvalidReadAddress(addr as isize))
+        }
+    }
+
+    fn write(&mut self, addr: usize, value: Word) -> Result<(), BadWrite> {
+        if addr < self.mem.len() {
+            self.mem[addr] = value;
+            Ok(())
+        } else if let Some(mut expanded) = self.expansion.as_mut() {
+            unimplemented!("should write {}", addr);
+        } else {
+            Err(BadWrite::AddressOutOfBounds)
+        }
+    }
+}
 
 pub struct Program<'a> {
     mem: &'a mut [Word],
