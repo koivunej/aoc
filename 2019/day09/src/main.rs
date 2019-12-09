@@ -33,3 +33,25 @@ fn boost(data: &[Word], input: Word) -> Word {
 }
 
 // TODO: add test cases for stage1 3638931938 and stage2 86025
+
+#[test]
+fn stage1_full() {
+    with_input(|input| assert_eq!(boost(input, 1), 3638931938));
+}
+
+#[test]
+fn stage2_full() {
+    with_input(|input| assert_eq!(boost(input, 2), 86025));
+}
+
+// FIXME: copied from day02, but too small to refactor
+#[cfg(test)]
+fn with_input<V, F: FnOnce(&[Word]) -> V>(f: F) -> V {
+    use std::io::BufReader;
+
+    let file = std::fs::File::open("input").expect("Could not open day02 input?");
+
+    let data = parse_program(BufReader::new(file)).unwrap();
+
+    f(&data)
+}
