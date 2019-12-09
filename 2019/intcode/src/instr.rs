@@ -1,6 +1,6 @@
 use smallvec::SmallVec;
 use std::convert::TryFrom;
-use crate::{DecodingError, DecodedOperation, Params, Param, BadWrite, Word};
+use crate::{DecodingError, DecodedOperation, Params, Param, BadWrite, Word, Memory};
 use crate::error::InvalidReadAddress;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -210,46 +210,42 @@ pub(crate) enum ParameterMode {
 }
 
 impl ParameterMode {
-    pub(crate) fn read(self, arg: Word, relbase: Word, program: &[Word]) -> Result<Word, InvalidReadAddress> {
+    pub(crate) fn read(self, arg: Word, relbase: Word, memory: &Memory) -> Result<Word, InvalidReadAddress> {
         match self {
-            ParameterMode::Address => Self::read_at(arg, program),
+            ParameterMode::Address => Self::read_at(arg, memory),
+            ParameterMode::Relative => Self::read_at(arg + relbase, memory),
             ParameterMode::Immediate => Ok(arg),
-            ParameterMode::Relative => Self::read_at(arg + relbase, program),
         }
     }
 
-    fn read_at(addr: Word, program: &[Word]) -> Result<Word, InvalidReadAddress> {
+    fn read_at(addr: Word, memory: &Memory) -> Result<Word, InvalidReadAddress> {
         if addr < 0 {
             return Err(InvalidReadAddress(addr));
         }
-        program.get(addr as usize)
-            .cloned()
-            .ok_or(InvalidReadAddress(addr))
+        memory.read(addr as usize)
     }
 
-    pub(crate) fn write(self, value: Word, arg: Word, relbase: Word, program: &mut [Word]) -> Result<(), BadWrite> {
+    pub(crate) fn write(self, value: Word, arg: Word, relbase: Word, memory: &mut Memory) -> Result<(), BadWrite> {
         use BadWrite::*;
         match self {
-            ParameterMode::Address => Self::write_at(value, arg, program),
+            ParameterMode::Address => Self::write_at(value, arg, memory),
+            ParameterMode::Relative => Self::write_at(value, arg + relbase, memory),
             ParameterMode::Immediate => Err(ImmediateParameter),
-            ParameterMode::Relative => Self::write_at(value, arg + relbase, program),
         }
     }
 
-    fn write_at(value: Word, addr: Word, program: &mut [Word]) -> Result<(), BadWrite> {
+    fn write_at(value: Word, addr: Word, memory: &mut Memory) -> Result<(), BadWrite> {
         use BadWrite::*;
         if addr < 0 {
-            return Err(AddressOutOfBounds);
+            return Err(NegativeAddress(addr));
         }
-        let cell = program.get_mut(addr as usize).ok_or(AddressOutOfBounds)?;
-        *cell = value;
-        Ok(())
+        memory.write(addr as usize, value)
     }
 }
 
 impl Param for ParameterMode {
-    fn read(self, arg: Word, relbase: Word, memory: &[Word]) -> Result<Word, InvalidReadAddress> { self.read(arg, relbase, memory) }
-    fn write(self, value: Word, arg: Word, relbase: Word, memory: &mut [Word]) -> Result<(), BadWrite> { self.write(value, arg, relbase, memory) }
+    fn read(self, arg: Word, relbase: Word, memory: &Memory) -> Result<Word, InvalidReadAddress> { self.read(arg, relbase, memory) }
+    fn write(self, value: Word, arg: Word, relbase: Word, memory: &mut Memory) -> Result<(), BadWrite> { self.write(value, arg, relbase, memory) }
 }
 
 #[derive(Debug, PartialEq, Clone)]

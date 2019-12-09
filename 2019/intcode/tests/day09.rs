@@ -7,7 +7,9 @@ fn stage1_quine() {
 
     let mut env = Environment::collector(None);
 
-    Program::wrap_and_eval_with_env(&mut prog, &mut env)
+    Program::wrap(&mut prog)
+        .with_memory_expansion()
+        .eval_with_env(&mut env)
         .unwrap();
 
     let output = env.unwrap_collected();

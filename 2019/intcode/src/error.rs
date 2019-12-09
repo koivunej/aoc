@@ -45,7 +45,8 @@ impl From<DecodingError> for ProgramError {
 
 #[derive(Debug)]
 pub enum BadWrite {
-    AddressOutOfBounds,
+    NegativeAddress(isize),
+    AddressOutOfBounds(usize),
     ImmediateParameter,
 }
 
