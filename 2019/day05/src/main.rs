@@ -50,7 +50,7 @@ fn full_stage2() {
     with_input(|data| assert_eq!(stage2(data), 4283952));
 }
 
-// FIXME: copied from day02, should refactor this into some test-support
+// FIXME: copied from day02, but too small to refactor
 #[cfg(test)]
 fn with_input<V, F: FnOnce(&[Word]) -> V>(f: F) -> V {
     use std::io::BufReader;

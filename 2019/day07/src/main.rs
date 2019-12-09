@@ -1,5 +1,6 @@
 use std::io::BufRead;
 use std::convert::TryFrom;
+use intcode::Word;
 
 fn main() {
     let stdin = std::io::stdin();
@@ -9,14 +10,14 @@ fn main() {
 
     for line in locked.lines() {
         let line = line.unwrap();
-        program.extend(line.split(',').map(|p| p.parse::<isize>().unwrap()));
+        program.extend(line.split(',').map(|p| p.parse::<Word>().unwrap()));
     }
 
     println!("stage1: {}", find_max_output(0, &program[..]));
     println!("stage2: {}", find_max_feedback_output(0, &program[..]));
 }
 
-fn find_max_output(seed: isize, program: &[isize]) -> isize {
+fn find_max_output(seed: Word, program: &[Word]) -> Word {
     let combined = CombinedMachine::new(&program[..]);
 
     let mut data = vec![0, 1, 2, 3, 4];
@@ -27,7 +28,7 @@ fn find_max_output(seed: isize, program: &[isize]) -> isize {
         .unwrap()
 }
 
-fn find_max_feedback_output(seed: isize, program: &[isize]) -> isize {
+fn find_max_feedback_output(seed: Word, program: &[Word]) -> Word {
     let combined = CombinedMachine::new(&program[..]);
 
     let mut data = vec![5, 6, 7, 8, 9];
@@ -39,17 +40,17 @@ fn find_max_feedback_output(seed: isize, program: &[isize]) -> isize {
 }
 
 struct CombinedMachine<'a> {
-    program: &'a [isize],
+    program: &'a [Word],
 }
 
 impl<'a> CombinedMachine<'a> {
-    fn new(program: &'a [isize]) -> Self {
+    fn new(program: &'a [Word]) -> Self {
         CombinedMachine {
             program,
         }
     }
 
-    fn in_sequence(&self, seed: isize, settings: &[isize]) -> isize {
+    fn in_sequence(&self, seed: Word, settings: &[Word]) -> Word {
         use std::iter::repeat;
         use std::collections::VecDeque;
         use intcode::{Program, Environment};
@@ -97,16 +98,16 @@ impl<'a> CombinedMachine<'a> {
         ret
     }
 
-    fn in_feedback_seq(&self, seed: isize, settings: &[isize]) -> isize {
+    fn in_feedback_seq(&self, seed: Word, settings: &[Word]) -> Word {
         use std::iter::repeat;
-        use intcode::{Program, ExecutionState};
+        use intcode::{Program, ExecutionState, Registers};
         use std::sync::mpsc::{channel, TryRecvError, SendError};
 
         let count = settings.len();
         let range = 0..count;
 
         let mut channels = range.clone()
-            .map(|_| channel::<isize>())
+            .map(|_| channel::<Word>())
             .map(|(tx, rx)| (Some(tx), Some(rx)))
             .collect::<Vec<_>>();
 
@@ -134,11 +135,11 @@ impl<'a> CombinedMachine<'a> {
             .enumerate()
             .map(|(tid, ((tx, rx), mut prog))| std::thread::spawn(move || {
                 let mut p = Program::wrap(&mut prog);
-                let mut ip = 0;
+                let mut regs = Registers::default();
                 let mut last_output = None;
                 let mut remote_disconnected = false;
                 loop {
-                    ip = match p.eval_from_instruction(ip).unwrap() {
+                    regs = match p.eval_from_instruction(regs).unwrap() {
                         ExecutionState::HaltedAt(_) => {
                             return last_output.expect("Nothing was output?");
                         },
@@ -196,10 +197,10 @@ impl<'a> CombinedMachine<'a> {
     }
 }
 
-struct PhaseSettings(Vec<isize>);
+struct PhaseSettings(Vec<Word>);
 
-impl AsRef<[isize]> for PhaseSettings {
-    fn as_ref(&self) -> &[isize] {
+impl AsRef<[Word]> for PhaseSettings {
+    fn as_ref(&self) -> &[Word] {
         self.0.as_ref()
     }
 }
@@ -211,10 +212,10 @@ enum InvalidPhaseSettings {
     Duplicates
 }
 
-impl TryFrom<Vec<isize>> for PhaseSettings {
+impl TryFrom<Vec<Word>> for PhaseSettings {
     type Error = InvalidPhaseSettings;
 
-    fn try_from(v: Vec<isize>) -> Result<Self, Self::Error> {
+    fn try_from(v: Vec<Word>) -> Result<Self, Self::Error> {
         if v.len() != 5 {
             return Err(InvalidPhaseSettings::WrongNumber);
         }
@@ -224,8 +225,8 @@ impl TryFrom<Vec<isize>> for PhaseSettings {
 
         for x in v.iter() {
             let x = *x;
-            min = min.map(|m: isize| m.min(x)).or_else(|| Some(x));
-            max = max.map(|m: isize| m.max(x)).or_else(|| Some(x));
+            min = min.map(|m: Word| m.min(x)).or_else(|| Some(x));
+            max = max.map(|m: Word| m.max(x)).or_else(|| Some(x));
         }
 
         let min = min.expect("Length already checked, there must be minimum");
@@ -282,3 +283,26 @@ fn stage2_example2() {
 // TODO: check against input:
 // stage1: 212460
 // stage2: 21844737
+
+#[test]
+fn stage1_full() {
+    with_input(|input| assert_eq!(find_max_output(0, input), 212460));
+}
+
+#[test]
+fn stage2_full() {
+    with_input(|input| assert_eq!(find_max_feedback_output(0, input), 21844737));
+}
+
+// FIXME: copied from day02, but too small to refactor
+#[cfg(test)]
+fn with_input<V, F: FnOnce(&[Word]) -> V>(f: F) -> V {
+    use std::io::BufReader;
+    use intcode::parse_program;
+
+    let file = std::fs::File::open("input").expect("Could not open day02 input?");
+
+    let data = parse_program(BufReader::new(file)).unwrap();
+
+    f(&data)
+}
