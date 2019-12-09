@@ -1,13 +1,13 @@
 use crate::error::ProgramError;
-use crate::IO;
+use crate::{IO, Word};
 use std::collections::VecDeque;
 
 #[derive(Debug)]
 pub enum Environment {
     NoIO,
-    Once(Option<isize>, Option<isize>),
-    Collector(Option<isize>, Vec<isize>),
-    ManyMany(VecDeque<isize>, Vec<isize>),
+    Once(Option<Word>, Option<Word>),
+    Collector(Option<Word>, Vec<Word>),
+    ManyMany(VecDeque<Word>, Vec<Word>),
 }
 
 impl std::default::Default for Environment {
@@ -17,7 +17,7 @@ impl std::default::Default for Environment {
 }
 
 impl Environment {
-    fn input(&mut self) -> Result<isize, ProgramError> {
+    fn input(&mut self) -> Result<Word, ProgramError> {
         let ret = match *self {
             Environment::NoIO => Err(ProgramError::NoMoreInput),
             Environment::Once(ref mut input, _)
@@ -31,7 +31,7 @@ impl Environment {
         ret
     }
 
-    fn output(&mut self, value: isize) -> Result<(), ProgramError> {
+    fn output(&mut self, value: Word) -> Result<(), ProgramError> {
         match *self {
             Environment::NoIO => Err(ProgramError::CannotOutput),
             Environment::Once(_, ref mut output) => {
@@ -50,34 +50,34 @@ impl Environment {
         }
     }
 
-    pub fn once(input: Option<isize>) -> Self {
+    pub fn once(input: Option<Word>) -> Self {
         Self::Once(input, None)
     }
 
-    pub fn collector(input: Option<isize>) -> Self {
+    pub fn collector(input: Option<Word>) -> Self {
         Self::Collector(input, Vec::new())
     }
 
     /// Inputs will be consumed with inputs.pop_front()
-    pub fn collected_with_many_inputs(inputs: VecDeque<isize>) -> Self {
+    pub fn collected_with_many_inputs(inputs: VecDeque<Word>) -> Self {
         Self::ManyMany(inputs, Vec::new())
     }
 
-    pub fn unwrap_input_consumed_once(self) -> Option<isize> {
+    pub fn unwrap_input_consumed_once(self) -> Option<Word> {
         match self.unwrap_once() {
             (None, x) => x,
             (Some(unconsumed), _) => unreachable!("Input {} was not consumed", unconsumed),
         }
     }
 
-    pub fn unwrap_once(self) -> (Option<isize>, Option<isize>) {
+    pub fn unwrap_once(self) -> (Option<Word>, Option<Word>) {
         match self {
             Environment::Once(input, output) => (input, output),
             x => unreachable!("Was not once: {:?}", x),
         }
     }
 
-    pub fn unwrap_collected(self) -> Vec<isize> {
+    pub fn unwrap_collected(self) -> Vec<Word> {
         match self {
             Environment::Collector(input, collected) => {
                 assert!(input.is_none());
@@ -93,6 +93,6 @@ impl Environment {
 }
 
 impl IO for Environment {
-    fn input(&mut self) -> Result<isize, ProgramError> { self.input() }
-    fn output(&mut self, value: isize) -> Result<(), ProgramError> { self.output(value) }
+    fn input(&mut self) -> Result<Word, ProgramError> { self.input() }
+    fn output(&mut self, value: Word) -> Result<(), ProgramError> { self.output(value) }
 }

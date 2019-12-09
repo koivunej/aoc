@@ -1,4 +1,4 @@
-use intcode::{parse_program, ParsingError, Program};
+use intcode::{parse_program, ParsingError, Program, Word};
 
 fn main() {
     let stdin = std::io::stdin();
@@ -17,7 +17,7 @@ fn main() {
     };
 
     {
-        println!("Value at position 0: {}", stage1(&data));
+        println!("Value at position 0: {}", stage1(&data[..]));
     }
 
     {
@@ -35,7 +35,7 @@ fn main() {
     }
 }
 
-fn stage1(data: &[isize]) -> isize {
+fn stage1(data: &[Word]) -> Word {
     let mut data = data.to_vec();
 
     // restore
@@ -46,7 +46,7 @@ fn stage1(data: &[isize]) -> isize {
     data[0]
 }
 
-fn find_coords(input: &[isize], magic: isize) -> Option<(isize, isize)> {
+fn find_coords(input: &[Word], magic: Word) -> Option<(Word, Word)> {
     let mut copy = input.to_vec();
 
     for i in 0..100 {
@@ -85,7 +85,7 @@ fn full_stage2() {
 }
 
 #[cfg(test)]
-fn with_input<V, F: FnOnce(&[isize]) -> V>(f: F) -> V {
+fn with_input<V, F: FnOnce(&[Word]) -> V>(f: F) -> V {
     use std::io::BufReader;
 
     let file = std::fs::File::open("input").expect("Could not open day02 input?");

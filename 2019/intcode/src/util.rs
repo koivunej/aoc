@@ -1,10 +1,12 @@
+use crate::Word;
+
 #[derive(Debug)]
 pub enum ParsingError {
     Io(std::io::Error, usize),
     Int(std::num::ParseIntError, usize, String),
 }
 
-pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<isize>, ParsingError> {
+pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<Word>, ParsingError> {
     use std::str::FromStr;
 
     let mut data = vec![];
@@ -21,7 +23,7 @@ pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<isize>, Parsin
             return Ok(data);
         }
 
-        let parts = buffer.trim().split(',').map(isize::from_str);
+        let parts = buffer.trim().split(',').map(Word::from_str);
 
         for part in parts {
             let part = match part {

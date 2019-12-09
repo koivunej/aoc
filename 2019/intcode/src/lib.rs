@@ -9,7 +9,7 @@ pub use util::{ParsingError, parse_program};
 pub use env::Environment;
 pub use exec::{Program, ExecutionState};
 
-type Word = isize;
+pub type Word = i64;
 
 #[derive(Default, Debug, Clone)]
 pub struct Registers {
@@ -69,7 +69,7 @@ impl<'a> Memory<'a> {
         } else if let Some(expanded) = self.expansion.as_ref() {
             Ok(*expanded.get(addr - self.mem.len()).unwrap_or(&0))
         } else {
-            Err(InvalidReadAddress(addr as isize))
+            Err(InvalidReadAddress(addr as Word))
         }
     }
 
@@ -90,7 +90,7 @@ impl<'a> Memory<'a> {
         }
     }
 
-    fn get(&self, addr: usize) -> Option<&isize> {
+    fn get(&self, addr: usize) -> Option<&Word> {
         if addr < self.mem.len() {
             self.mem.get(addr)
         } else if let Some(expanded) = self.expansion.as_ref() {
@@ -108,7 +108,7 @@ impl<'a> Memory<'a> {
 }
 
 impl<'a> std::ops::Index<usize> for Memory<'a> {
-    type Output = isize;
+    type Output = Word;
 
     fn index(&self, index: usize) -> &Self::Output {
         if index < self.mem.len() {

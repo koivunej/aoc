@@ -1,10 +1,10 @@
-use intcode::{Program, Environment};
+use intcode::{Program, Environment, Word};
 
 #[test]
 fn stage1_example() {
     let mut prog = vec![1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50];
 
-    let expected = &[3500isize, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
+    let expected = &[3500, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
 
     Program::wrap_and_eval(&mut prog).unwrap();
 
@@ -64,7 +64,7 @@ fn stage2_input_eq_0() {
     }
 }
 
-fn stage2_example_scenario(data: &[isize], input: isize) -> isize {
+fn stage2_example_scenario(data: &[Word], input: Word) -> Word {
     let mut prog = data.to_vec();
     let mut env = Environment::once(Some(input));
 

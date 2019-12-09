@@ -1,4 +1,4 @@
-use intcode::{parse_program, Environment, ParsingError, Program};
+use intcode::{parse_program, Environment, ParsingError, Program, Word};
 
 fn main() {
     let stdin = std::io::stdin();
@@ -20,7 +20,7 @@ fn main() {
     println!("stage2: {:?}", stage2(&data));
 }
 
-fn stage1(data: &[isize]) -> isize {
+fn stage1(data: &[Word]) -> Word {
     let mut data = data.to_vec();
     let mut env = Environment::collector(Some(1));
 
@@ -30,7 +30,7 @@ fn stage1(data: &[isize]) -> isize {
     *output.last().expect("No output?")
 }
 
-fn stage2(data: &[isize]) -> isize {
+fn stage2(data: &[Word]) -> Word {
     let mut data = data.to_vec();
     let mut env = Environment::once(Some(5));
 
@@ -52,7 +52,7 @@ fn full_stage2() {
 
 // FIXME: copied from day02, should refactor this into some test-support
 #[cfg(test)]
-fn with_input<V, F: FnOnce(&[isize]) -> V>(f: F) -> V {
+fn with_input<V, F: FnOnce(&[Word]) -> V>(f: F) -> V {
     use std::io::BufReader;
 
     let file = std::fs::File::open("input").expect("Could not open day02 input?");
