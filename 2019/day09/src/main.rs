@@ -31,3 +31,5 @@ fn boost(data: &[Word], input: Word) -> Word {
 
     env.unwrap_input_consumed_once().unwrap()
 }
+
+// TODO: add test cases for stage1 3638931938 and stage2 86025
