@@ -100,103 +100,126 @@ impl<'a> CombinedMachine<'a> {
     }
 
     fn in_feedback_seq(&self, seed: Word, settings: &[Word]) -> Word {
-        use std::iter::repeat;
-        use intcode::{Program, ExecutionState, Registers};
-        use std::sync::mpsc::{channel, TryRecvError, SendError};
-
-        let count = settings.len();
-        let range = 0..count;
-
-        let mut channels = range.clone()
-            .map(|_| channel::<Word>())
-            .map(|(tx, rx)| (Some(tx), Some(rx)))
-            .collect::<Vec<_>>();
-
-        // seed -+-> 1 -> 2 -> 3 -> 4 -> 5 --+---\
-        //       \___________________________/   |
-        //                                       \--> output
-        //
-
-        // send out the phase settings first
-        settings.iter()
-            .zip(channels.iter().map(|(tx, _)| tx.as_ref().unwrap()))
-            .for_each(|(phase, tx)| tx.send(*phase).unwrap());
-
-        // keep this for now, lets start everything up before seeding
-        let seeder = channels[0].0.as_ref().cloned().unwrap();
-
-        let join_handles = range.clone()
-            .map(|index| (index + 1) % count)
-            .zip(range)
-            // output is always sent to next (index + 1), input is always read from index
-            .map(|(output_index, input_index)| (channels[output_index].0.take().unwrap(), channels[input_index].1.take().unwrap()))
-            // each have their own owned copy of the program
-            .zip(repeat(self.program).map(|p| p.to_vec()))
-            // each run in separate threads
-            .enumerate()
-            .map(|(tid, ((tx, rx), mut prog))| std::thread::spawn(move || {
-                let mut p = Program::wrap(&mut prog);
-                let mut regs = Registers::default();
-                let mut last_output = None;
-                let mut remote_disconnected = false;
-                loop {
-                    regs = match p.eval_from_instruction(regs).unwrap() {
-                        ExecutionState::HaltedAt(_) => {
-                            return last_output.expect("Nothing was output?");
-                        },
-                        ExecutionState::InputIO(io) => {
-                            let read = match rx.try_recv() {
-                                Ok(read) => {
-                                    read
-                                },
-                                Err(TryRecvError::Empty) => {
-                                    let read = rx.recv().unwrap();
-                                    read
-                                },
-                                Err(TryRecvError::Disconnected) => {
-                                    panic!("{} was disconnected", tid);
-                                },
-                            };
-                            p.handle_input_completion(io, read).unwrap()
-                        }
-                        ExecutionState::OutputIO(io, val) => {
-                            last_output = Some(val);
-                            match tx.send(val) {
-                                Ok(_) => {},
-                                Err(SendError(_)) => {
-                                    // allow this to happen once; it does not always happen as the
-                                    // first one may still be alive when the message is sent but it
-                                    // will never consume it
-                                    assert!(!remote_disconnected);
-                                    remote_disconnected = true;
-                                }
-                            }
-                            p.handle_output_completion(io)
-                        }
-                    }
-                }
-            }))
-            .collect::<Vec<_>>();
-
-        // everyone is up and running, hopefully blocking soon, seed the first
-        seeder.send(seed).unwrap();
-        // no need to keep the channel up for us
-        drop(seeder);
-
-        join_handles.into_iter()
-            .map(|jh| jh.join())
-            .enumerate()
-            .map(|(tid, res)| match res {
-                Ok(x) => x,
-                Err(e) => {
-                    // this is always "Any" so not really helpful
-                    panic!("{}: returned error of type {:?}", tid, e);
-                }
-            })
-            .last()
-            .unwrap()
+        Strategy::ThreadedNaive.in_feedback_seq(self.program, seed, settings)
     }
 }
+
+enum Strategy {
+    ThreadedNaive,
+    SingleThread,
+}
+
+impl Strategy {
+    fn in_feedback_seq(&self, program: &[Word], seed: Word, settings: &[Word]) -> Word {
+        match *self {
+            Self::ThreadedNaive => threaded_naive(program, seed, settings),
+            Self::SingleThread => single_thread(program, seed, settings),
+        }
+    }
+}
+
+fn threaded_naive(program: &[Word], seed: Word, settings: &[Word]) -> Word {
+    use std::iter::repeat;
+    use intcode::{Program, ExecutionState, Registers};
+    use std::sync::mpsc::{channel, TryRecvError, SendError};
+
+    let count = settings.len();
+    let range = 0..count;
+
+    let mut channels = range.clone()
+        .map(|_| channel::<Word>())
+        .map(|(tx, rx)| (Some(tx), Some(rx)))
+        .collect::<Vec<_>>();
+
+    // seed -+-> 1 -> 2 -> 3 -> 4 -> 5 --+---\
+    //       \___________________________/   |
+    //                                       \--> output
+    //
+
+    // send out the phase settings first
+    settings.iter()
+        .zip(channels.iter().map(|(tx, _)| tx.as_ref().unwrap()))
+        .for_each(|(phase, tx)| tx.send(*phase).unwrap());
+
+    // keep this for now, lets start everything up before seeding
+    let seeder = channels[0].0.as_ref().cloned().unwrap();
+
+    let join_handles = range.clone()
+        .map(|index| (index + 1) % count)
+        .zip(range)
+        // output is always sent to next (index + 1), input is always read from index
+        .map(|(output_index, input_index)| (channels[output_index].0.take().unwrap(), channels[input_index].1.take().unwrap()))
+        // each have their own owned copy of the program
+        .zip(repeat(program).map(|p| p.to_vec()))
+        // each run in separate threads
+        .enumerate()
+        .map(|(tid, ((tx, rx), mut prog))| std::thread::spawn(move || {
+            let mut p = Program::wrap(&mut prog);
+            let mut regs = Registers::default();
+            let mut last_output = None;
+            let mut remote_disconnected = false;
+            loop {
+                regs = match p.eval_from_instruction(regs).unwrap() {
+                    ExecutionState::HaltedAt(_) => {
+                        return last_output.expect("Nothing was output?");
+                    },
+                    ExecutionState::InputIO(io) => {
+                        let read = match rx.try_recv() {
+                            Ok(read) => {
+                                read
+                            },
+                            Err(TryRecvError::Empty) => {
+                                let read = rx.recv().unwrap();
+                                read
+                            },
+                            Err(TryRecvError::Disconnected) => {
+                                panic!("{} was disconnected", tid);
+                            },
+                        };
+                        p.handle_input_completion(io, read).unwrap()
+                    }
+                    ExecutionState::OutputIO(io, val) => {
+                        last_output = Some(val);
+                        match tx.send(val) {
+                            Ok(_) => {},
+                            Err(SendError(_)) => {
+                                // allow this to happen once; it does not always happen as the
+                                // first one may still be alive when the message is sent but it
+                                // will never consume it
+                                assert!(!remote_disconnected);
+                                remote_disconnected = true;
+                            }
+                        }
+                        p.handle_output_completion(io)
+                    }
+                }
+            }
+        }))
+        .collect::<Vec<_>>();
+
+    // everyone is up and running, hopefully blocking soon, seed the first
+    seeder.send(seed).unwrap();
+    // no need to keep the channel up for us
+    drop(seeder);
+
+    join_handles.into_iter()
+        .map(|jh| jh.join())
+        .enumerate()
+        .map(|(tid, res)| match res {
+            Ok(x) => x,
+            Err(e) => {
+                // this is always "Any" so not really helpful
+                panic!("{}: returned error of type {:?}", tid, e);
+            }
+        })
+        .last()
+        .unwrap()
+}
+
+fn single_thread(program: &[Word], seed: Word, settings: &[Word]) -> Word {
+    unimplemented!()
+}
+
 
 struct PhaseSettings<'a>(Cow<'a, [Word]>);
 
