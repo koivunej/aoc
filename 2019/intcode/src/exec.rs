@@ -32,6 +32,7 @@ impl Output {
 }
 
 pub enum ExecutionState {
+    Paused(Registers),
     HaltedAt(Registers),
     InputIO(Input),
     OutputIO(Output, Word),
@@ -163,6 +164,7 @@ impl<'a> Program<'a> {
         let mut regs = Registers::default();
         loop {
             regs = match self.eval_from_instruction(regs)? {
+                ExecutionState::Paused(_regs) => unreachable!("Pausing not implemented yet?"),
                 ExecutionState::HaltedAt(regs) => return Ok(regs.instruction_pointer()),
                 ExecutionState::InputIO(io) => {
                     let input = env.input().map_err(|e| e.at(io.registers()))?;

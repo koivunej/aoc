@@ -160,6 +160,7 @@ fn threaded_naive(program: &[Word], seed: Word, settings: &[Word]) -> Word {
             let mut remote_disconnected = false;
             loop {
                 regs = match p.eval_from_instruction(regs).unwrap() {
+                    ExecutionState::Paused(_) => unreachable!(),
                     ExecutionState::HaltedAt(_) => {
                         return last_output.expect("Nothing was output?");
                     },
@@ -217,9 +218,58 @@ fn threaded_naive(program: &[Word], seed: Word, settings: &[Word]) -> Word {
 }
 
 fn single_thread(program: &[Word], seed: Word, settings: &[Word]) -> Word {
-    unimplemented!()
-}
+    use std::iter::repeat;
+    use std::collections::VecDeque;
+    use intcode::{Program, ExecutionState, Registers};
 
+    let mut inputs = settings.iter().cloned().map(|i| { let mut v = VecDeque::new(); v.push_back(i); v }).collect::<Vec<_>>();
+    let mut programs = repeat(program.to_vec()).take(settings.len()).collect::<Vec<_>>();
+    let mut registers = (0..settings.len()).into_iter().map(|_| Some(ExecutionState::Paused(Registers::default()))).collect::<Vec<_>>();
+
+    inputs[0].push_back(seed);
+
+    let mut i = 0;
+
+    while !registers.iter().all(|r| if let Some(&ExecutionState::HaltedAt(_)) = r.as_ref() { true } else { false }) {
+
+        if let Some(&ExecutionState::HaltedAt(_)) = registers[i].as_ref() {
+            i = (i + 1) % settings.len();
+            continue;
+        }
+
+        let next = match registers[i].take() {
+            Some(ExecutionState::Paused(regs)) => {
+                Program::wrap(&mut programs[i])
+                    .eval_from_instruction(regs)
+                    .unwrap()
+            },
+            Some(ExecutionState::HaltedAt(_)) => unreachable!(),
+            Some(ExecutionState::InputIO(io)) if !inputs[i].is_empty() => {
+                let mut p = Program::wrap(&mut programs[i]);
+                let regs = p.handle_input_completion(io, inputs[i].pop_front().unwrap()).unwrap();
+                p.eval_from_instruction(regs)
+                    .unwrap()
+            },
+            Some(x @ ExecutionState::InputIO(_)) => x,
+            Some(ExecutionState::OutputIO(io, val)) => {
+                let index = (i + 1) % settings.len();
+                inputs[index].push_back(val);
+
+                let mut p = Program::wrap(&mut programs[i]);
+                let regs = p.handle_output_completion(io);
+                p.eval_from_instruction(regs)
+                    .unwrap()
+            }
+            None => unreachable!(),
+        };
+
+        registers[i] = Some(next);
+        i = (i + 1) % settings.len();
+    }
+
+    assert_eq!(inputs[i].len(), 1);
+    inputs[i].pop_front().unwrap()
+}
 
 struct PhaseSettings<'a>(Cow<'a, [Word]>);
 
