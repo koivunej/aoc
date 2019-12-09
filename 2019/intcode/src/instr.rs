@@ -26,14 +26,6 @@ impl OpCode {
             OpCode::Halt => 0,
         }
     }
-
-    fn only_default_parameters(&self) -> bool {
-        if let OpCode::Store = *self {
-            true
-        } else {
-            false
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -110,15 +102,9 @@ impl TryFrom<Word> for Operation {
         }
 
         let op = OpCode::try_from(raw)?;
-        let mut pvs = ParameterModes::try_from(raw)?
+        let pvs = ParameterModes::try_from(raw)?
             .at_most(op.parameters())
             .map_err(|_| DecodingError::TooManyParameters(raw))?;
-
-        if op.only_default_parameters() {
-            pvs = pvs
-                .all_must_equal_default()
-                .map_err(|_| DecodingError::InvalidParameterMode(raw))?;
-        }
 
         Ok(Operation(op, pvs))
     }
@@ -180,14 +166,6 @@ impl ParameterModes {
 
     fn instruction_has_modes(raw: Word) -> bool {
         raw > 100
-    }
-
-    fn all_must_equal_default(self) -> Result<Self, ()> {
-        if self.modes.is_empty() || self.modes.iter().all(|pm| pm == &DEFAULT_PARAMETER_MODE) {
-            Ok(self)
-        } else {
-            Err(())
-        }
     }
 
     fn at_most(mut self, count: usize) -> Result<Self, ()> {
