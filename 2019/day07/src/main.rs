@@ -1,5 +1,6 @@
 use std::io::BufRead;
 use std::convert::TryFrom;
+use std::borrow::Cow;
 use intcode::Word;
 
 fn main() {
@@ -22,7 +23,7 @@ fn find_max_output(seed: Word, program: &[Word]) -> Word {
 
     let mut data = vec![0, 1, 2, 3, 4];
     permutohedron::Heap::new(&mut data).into_iter()
-        //.map(|settings| PhaseSettings::try_from(settings.to_vec()).unwrap())
+        .map(|settings| PhaseSettings::try_from(Cow::from(settings)).unwrap())
         .map(move |settings| combined.in_sequence(seed, settings.as_ref()))
         .max()
         .unwrap()
@@ -33,7 +34,7 @@ fn find_max_feedback_output(seed: Word, program: &[Word]) -> Word {
 
     let mut data = vec![5, 6, 7, 8, 9];
     permutohedron::Heap::new(&mut data).into_iter()
-        //.map(|settings| PhaseSettings::try_from(settings.to_vec()).unwrap())
+        .map(|settings| PhaseSettings::try_from(Cow::from(settings)).unwrap())
         .map(move |settings| combined.in_feedback_seq(seed, settings.as_ref()))
         .max()
         .unwrap()
@@ -197,9 +198,9 @@ impl<'a> CombinedMachine<'a> {
     }
 }
 
-struct PhaseSettings(Vec<Word>);
+struct PhaseSettings<'a>(Cow<'a, [Word]>);
 
-impl AsRef<[Word]> for PhaseSettings {
+impl<'a> AsRef<[Word]> for PhaseSettings<'a> {
     fn as_ref(&self) -> &[Word] {
         self.0.as_ref()
     }
@@ -212,10 +213,10 @@ enum InvalidPhaseSettings {
     Duplicates
 }
 
-impl TryFrom<Vec<Word>> for PhaseSettings {
+impl<'a> TryFrom<Cow<'a, [Word]>> for PhaseSettings<'a> {
     type Error = InvalidPhaseSettings;
 
-    fn try_from(v: Vec<Word>) -> Result<Self, Self::Error> {
+    fn try_from(v: Cow<'a, [Word]>) -> Result<Self, Self::Error> {
         if v.len() != 5 {
             return Err(InvalidPhaseSettings::WrongNumber);
         }
@@ -279,10 +280,6 @@ fn stage2_example2() {
 
     assert_eq!(find_max_feedback_output(0, &program[..]), 18216);
 }
-
-// TODO: check against input:
-// stage1: 212460
-// stage2: 21844737
 
 #[test]
 fn stage1_full() {
