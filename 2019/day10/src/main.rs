@@ -25,42 +25,17 @@ fn main() {
         }
     }
 
+    let map = Map::parse(&[&all], (width.unwrap(), height)).unwrap();
 
-    println!("stage1: {}", best_asteroid_for_monitoring(&[&all], (width.unwrap(), height)).1);
+    let (coords, asteroids) = map.best_asteroid_for_monitoring();
+
+    println!("stage1: {}", asteroids);
+
+    println!("stage2: {:?}", map.killed_asteroids_clockwise(coords)[199]);
 }
 
 type Size = (usize, usize);
 type Point = (isize, isize);
-
-fn best_asteroid_for_monitoring(map: &[&str], (width, height): Size) -> (Point, usize) {
-    let map = Map::parse(map, (width, height)).unwrap();
-
-    let mut max = None;
-
-    let mut uniq = HashSet::new();
-
-    for (x0, y0) in map.asteroid_points() {
-        uniq.clear();
-
-        // not sure if there is a better than O(n²) for this
-        for (x1, y1) in map.asteroid_points() {
-            // invert y
-            let (dx, dy) = (x1 - x0, -(y1 - y0));
-
-            let degrees = f64::atan2(dx as f64, dy as f64).to_degrees();
-
-            // well this is sketchy
-            uniq.insert((100.0 * degrees) as i64);
-        }
-
-        // poor mans max_by_key
-        max = max.take()
-            .map(|(p, asteroids)| if asteroids > uniq.len() { (p, asteroids) } else { ((x0, y0), uniq.len()) })
-            .or_else(|| Some(((x0, y0), uniq.len())));
-    }
-
-    max.unwrap()
-}
 
 #[derive(Debug, PartialEq, Clone)]
 enum Element {
@@ -115,6 +90,81 @@ impl Map {
     fn offset_to_point(size: Size, offset: usize) -> Point {
         ((offset % size.0) as isize, (offset / size.0) as isize)
     }
+
+    fn killed_asteroids_clockwise(&self, pov: Point) -> Vec<Point> {
+        let mut seen = self.asteroids_at_angles(pov)
+            .filter(|(p, _)| p != &pov)
+            .map(|(p, degrees)|(p, (100.0 * degrees) as i64, (100.0 * (((pov.0 - p.0) as f64).powi(2) + ((pov.1 - p.1) as f64).powi(2)).sqrt()) as i32))
+            .collect::<Vec<_>>();
+
+        seen.sort_by_key(|(_, degs, dist)| (*degs, *dist));
+
+        let mut returned = Vec::with_capacity(seen.len());
+
+        let mut handled = HashSet::new();
+
+        while returned.len() != seen.len() {
+            let mut last_deg = None;
+            for (p, deg, _) in seen.iter() {
+
+                if handled.contains(&p) {
+                    continue;
+                }
+
+                match (last_deg.clone(), deg) {
+                    (Some(x), deg) if x == deg => {
+                        continue;
+                    },
+                    (_, deg) => {
+                        handled.insert(p);
+                        returned.push(*p);
+                        last_deg = Some(deg);
+                    }
+                }
+            }
+        }
+
+        returned
+    }
+
+    fn best_asteroid_for_monitoring(&self) -> (Point, usize) {
+
+        let mut max = None;
+
+        let mut uniq = HashSet::new();
+
+        for (x0, y0) in self.asteroid_points() {
+            uniq.clear();
+
+            // not sure if there is a better than O(n²) for this
+
+            uniq.extend(
+                self.asteroids_at_angles((x0, y0))
+                    .map(|(_, degrees)|(100.0 * degrees) as i64));
+
+            // poor mans max_by_key
+            max = max.take()
+                .map(|(p, asteroids)| if asteroids > uniq.len() { (p, asteroids) } else { ((x0, y0), uniq.len()) })
+                .or_else(|| Some(((x0, y0), uniq.len())));
+        }
+
+        max.unwrap()
+    }
+
+    fn asteroids_at_angles<'a>(&'a self, pov: Point) -> impl Iterator<Item = (Point, f64)> + 'a {
+        self.asteroid_points()
+            .map(move |p| {
+                let (dx, dy) = (p.0 - pov.0, -(p.1 - pov.1));
+
+                let degrees = f64::atan2(dx as f64, dy as f64).to_degrees();
+
+                if degrees < 0.0 {
+                    (p, degrees + 360.0)
+                } else {
+                    (p, degrees)
+                }
+            })
+    }
 }
 
 impl std::ops::Index<Point> for Map {
@@ -143,6 +193,12 @@ impl Display for Map {
 
         Ok(())
     }
+}
+
+#[cfg(test)]
+fn best_asteroid_for_monitoring(map: &[&str], (width, height): Size) -> (Point, usize) {
+    let map = Map::parse(map, (width, height)).unwrap();
+    map.best_asteroid_for_monitoring()
 }
 
 #[test]
@@ -237,4 +293,39 @@ fn stage1_fifth_example() {
 
     assert_eq!(best_asteroid_for_monitoring(&map[..], (map[0].len(), map.len())), ((11, 13), 210));
 
+}
+
+#[test]
+fn stage2_example() {
+    let map = &[
+        ".#..##.###...#######",
+        "##.############..##.",
+        ".#.######.########.#",
+        ".###.#######.####.#.",
+        "#####.##.#.##.###.##",
+        "..#####..#.#########",
+        "####################",
+        "#.####....###.#.#.##",
+        "##.#################",
+        "#####.##.###..####..",
+        "..######..##.#######",
+        "####.##.####...##..#",
+        ".#####..#.######.###",
+        "##...#.##########...",
+        "#.##########.#######",
+        ".####.#.###.###.#.##",
+        "....##.##.###..#####",
+        ".#.#.###########.###",
+        "#.#.#.#####.####.###",
+        "###.##.####.##.#..##",
+    ];
+
+    let pov = (11, 13);
+
+    let map = Map::parse(map, (map[0].len(), map.len())).unwrap();
+
+    let killed = map.killed_asteroids_clockwise(pov);
+
+    assert_eq!(killed[0], (11, 12));
+    assert_eq!(killed[298], (11, 1));
 }
