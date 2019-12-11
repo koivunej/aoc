@@ -171,7 +171,8 @@ X XXXX XXXX XX X XX X XX X XXXX XX XXXX XXX
 X XXXX   XX XX X XXXX XX X XXXX XXXXXX XXXX
 X XXXX XXXX   XX XXXX   XX XXXX X  XX XXXXX
 X XXXX XXXX XXXX XX X XXXX XXXX XX X XXXXXX
-X    X    X XXXXX  XX XXXX    XX   X    XXX".trim();
+X    X    X XXXXX  XX XXXX    XX   X    XXX
+";
 
     intcode::with_parsed_program(|data| assert_eq!(stage2(data), expected));
 }
