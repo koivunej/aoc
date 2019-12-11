@@ -1,20 +1,7 @@
-use intcode::{parse_program, Environment, ParsingError, Program, Word};
+use intcode::{parse_stdin_program, Environment, Program, Word};
 
 fn main() {
-    let stdin = std::io::stdin();
-    let locked = stdin.lock();
-
-    let data = match parse_program(locked) {
-        Ok(data) => data,
-        Err(ParsingError::Io(e, line)) => {
-            eprintln!("Failed to read stdin near line {}: {}", line, e);
-            std::process::exit(1);
-        }
-        Err(ParsingError::Int(e, line, raw)) => {
-            eprintln!("Bad input at line {}: \"{}\" ({})", line, raw, e);
-            std::process::exit(1);
-        }
-    };
+    let data = parse_stdin_program();
 
     println!("stage1: {:?}", stage1(&data));
     println!("stage2: {:?}", stage2(&data));
@@ -42,22 +29,10 @@ fn stage2(data: &[Word]) -> Word {
 
 #[test]
 fn full_stage1() {
-    with_input(|data| assert_eq!(stage1(data), 9938601));
+    intcode::with_parsed_program(|data| assert_eq!(stage1(data), 9938601));
 }
 
 #[test]
 fn full_stage2() {
-    with_input(|data| assert_eq!(stage2(data), 4283952));
-}
-
-// FIXME: copied from day02, but too small to refactor
-#[cfg(test)]
-fn with_input<V, F: FnOnce(&[Word]) -> V>(f: F) -> V {
-    use std::io::BufReader;
-
-    let file = std::fs::File::open("input").expect("Could not open day02 input?");
-
-    let data = parse_program(BufReader::new(file)).unwrap();
-
-    f(&data)
+    intcode::with_parsed_program(|data| assert_eq!(stage2(data), 4283952));
 }

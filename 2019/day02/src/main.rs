@@ -1,20 +1,7 @@
-use intcode::{parse_program, ParsingError, Program, Word};
+use intcode::{parse_stdin_program, Program, Word};
 
 fn main() {
-    let stdin = std::io::stdin();
-    let locked = stdin.lock();
-
-    let data = match parse_program(locked) {
-        Ok(data) => data,
-        Err(ParsingError::Io(e, line)) => {
-            eprintln!("Failed to read stdin near line {}: {}", line, e);
-            std::process::exit(1);
-        }
-        Err(ParsingError::Int(e, line, raw)) => {
-            eprintln!("Bad input at line {}: \"{}\" ({})", line, raw, e);
-            std::process::exit(1);
-        }
-    };
+    let data = parse_stdin_program();
 
     {
         println!("Value at position 0: {}", stage1(&data[..]));
@@ -70,27 +57,16 @@ fn find_coords(input: &[Word], magic: Word) -> Option<(Word, Word)> {
 
 #[test]
 fn full_stage1() {
-    with_input(|data| {
+    intcode::with_parsed_program(|data| {
         assert_eq!(stage1(data), 3224742);
     });
 }
 
 #[test]
 fn full_stage2() {
-    with_input(|data| {
+    intcode::with_parsed_program(|data| {
         let magic = 19690720;
         let res = find_coords(data, magic).map(|(noun, verb)| 100 * noun + verb);
         assert_eq!(res, Some(7960));
     });
-}
-
-#[cfg(test)]
-fn with_input<V, F: FnOnce(&[Word]) -> V>(f: F) -> V {
-    use std::io::BufReader;
-
-    let file = std::fs::File::open("input").expect("Could not open day02 input?");
-
-    let data = parse_program(BufReader::new(file)).unwrap();
-
-    f(&data)
 }

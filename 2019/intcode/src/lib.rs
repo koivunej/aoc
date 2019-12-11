@@ -5,7 +5,7 @@ mod env;
 mod exec;
 
 pub use error::*;
-pub use util::{ParsingError, parse_program};
+pub use util::{ParsingError, parse_stdin_program, with_parsed_program};
 pub use env::Environment;
 pub use exec::{Program, ExecutionState};
 

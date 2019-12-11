@@ -1,18 +1,9 @@
-use std::io::BufRead;
 use std::convert::TryFrom;
 use std::borrow::Cow;
-use intcode::Word;
+use intcode::{Word, parse_stdin_program};
 
 fn main() {
-    let stdin = std::io::stdin();
-    let locked = stdin.lock();
-
-    let mut program = Vec::new();
-
-    for line in locked.lines() {
-        let line = line.unwrap();
-        program.extend(line.split(',').map(|p| p.parse::<Word>().unwrap()));
-    }
+    let program = parse_stdin_program();
 
     println!("stage1: {}", find_max_output(0, &program[..]));
     println!("stage2: {}", find_max_feedback_output(0, &program[..]));
@@ -357,23 +348,10 @@ fn stage2_example2() {
 
 #[test]
 fn stage1_full() {
-    with_input(|input| assert_eq!(find_max_output(0, input), 212460));
+    intcode::with_parsed_program(|input| assert_eq!(find_max_output(0, input), 212460));
 }
 
 #[test]
 fn stage2_full() {
-    with_input(|input| assert_eq!(find_max_feedback_output(0, input), 21844737));
-}
-
-// FIXME: copied from day02, but too small to refactor
-#[cfg(test)]
-fn with_input<V, F: FnOnce(&[Word]) -> V>(f: F) -> V {
-    use std::io::BufReader;
-    use intcode::parse_program;
-
-    let file = std::fs::File::open("input").expect("Could not open day02 input?");
-
-    let data = parse_program(BufReader::new(file)).unwrap();
-
-    f(&data)
+    intcode::with_parsed_program(|input| assert_eq!(find_max_feedback_output(0, input), 21844737));
 }
