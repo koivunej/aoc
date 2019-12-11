@@ -19,8 +19,6 @@ fn boost(data: &[Word], input: Word) -> Word {
     env.unwrap_input_consumed_once().unwrap()
 }
 
-// TODO: add test cases for stage1 3638931938 and stage2 86025
-
 #[test]
 fn stage1_full() {
     intcode::with_parsed_program(|input| assert_eq!(boost(input, 1), 3638931938));
