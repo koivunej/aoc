@@ -27,3 +27,5 @@ Day6: Used `petgraph` which turned out quite difficult. Hard to understand why
 you can't take a directed graph and view it as undirected? Also needed to
 rebase [an older PR](https://github.com/petgraph/petgraph/pull/151) to get the
 transitive closure algorithm.
+
+Day11: Further `intcode` memory abstraction with custom `Cow` type. Can't remember why.
