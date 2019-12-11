@@ -39,6 +39,20 @@ pub enum ExecutionState {
     // here could be paused for coop scheduling?
 }
 
+impl std::default::Default for ExecutionState {
+    fn default() -> Self {
+        ExecutionState::Paused(Registers::default())
+    }
+}
+
+impl<'a> From<Memory<'a>> for Program<'a> {
+    fn from(mem: Memory<'a>) -> Self {
+        Program {
+            mem
+        }
+    }
+}
+
 impl<'a> Program<'a> {
 
     fn exec(&mut self, regs: Registers, op: Operation) -> Result<State, ProgramError> {

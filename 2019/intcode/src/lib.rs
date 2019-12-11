@@ -45,15 +45,69 @@ impl Registers {
     }
 }
 
+/// Custom version of std::borrow::Cow which does not work on mutable borrows.
+enum RawMemory<'a> {
+    Borrowed(&'a mut [Word]),
+    Owned(Vec<Word>),
+}
+
+impl<'a> From<&'a mut [Word]> for RawMemory<'a> {
+    fn from(m: &'a mut [Word]) -> Self {
+        RawMemory::Borrowed(m)
+    }
+}
+
+impl<'a> std::ops::Deref for RawMemory<'a> {
+    type Target = [Word];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            &Self::Borrowed(ref data) => data,
+            &Self::Owned(ref data) => data.as_slice(),
+        }
+    }
+}
+
+impl<'a> std::ops::DerefMut for RawMemory<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            &mut Self::Borrowed(ref mut data) => data,
+            &mut Self::Owned(ref mut data) => data.as_mut_slice(),
+        }
+    }
+}
+
+impl<'a> RawMemory<'a> {
+    fn into_owned(self) -> RawMemory<'static> {
+        match self {
+            Self::Borrowed(data) => RawMemory::Owned(data.to_vec()),
+
+            // this is quite surprising that it needs to be repeated but the left side is
+            // RawMemory<'a> but right side is RawMemory<'static>
+            Self::Owned(data) => RawMemory::Owned(data),
+        }
+    }
+}
+
+/// State of a single program.
 pub struct Memory<'a> {
-    mem: &'a mut [Word],
+    mem: RawMemory<'a>,
     expansion: Option<Vec<Word>>, // None if expanded memory is not supported
 }
 
 impl<'a> From<&'a mut [Word]> for Memory<'a> {
     fn from(mem: &'a mut [Word]) -> Self {
         Memory {
-            mem,
+            mem: RawMemory::from(mem),
+            expansion: None,
+        }
+    }
+}
+
+impl<'a> From<&'a [Word]> for Memory<'static> {
+    fn from(mem: &'a [Word]) -> Self {
+        Memory {
+            mem: RawMemory::Owned(mem.to_vec()),
             expansion: None,
         }
     }
@@ -100,7 +154,14 @@ impl<'a> Memory<'a> {
         }
     }
 
-    fn with_memory_expansion(mut self) -> Self {
+    pub fn into_owned(self) -> Memory<'static> {
+        Memory {
+            mem: self.mem.into_owned(),
+            expansion: self.expansion,
+        }
+    }
+
+    pub fn with_memory_expansion(mut self) -> Self {
         assert!(self.expansion.is_none());
         self.expansion = Some(Vec::new());
         self
