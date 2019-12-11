@@ -166,8 +166,7 @@ fn full_stage1() {
 #[test]
 fn full_stage2() {
     let expected =
-"\
-X XXXX    X   XXX  XX   XX XXXXX  XX    XXX
+"X XXXX    X   XXX  XX   XX XXXXX  XX    XXX
 X XXXX XXXX XX X XX X XX X XXXX XX XXXX XXX
 X XXXX   XX XX X XXXX XX X XXXX XXXXXX XXXX
 X XXXX XXXX   XX XXXX   XX XXXX X  XX XXXXX
