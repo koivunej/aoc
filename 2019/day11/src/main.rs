@@ -5,7 +5,7 @@ fn main() {
     let data = parse_stdin_program();
 
     println!("{}", stage1(&data[..]));
-    stage2(&data[..]);
+    println!("{}", stage2(&data[..]));
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -71,7 +71,7 @@ fn stage1(data: &[Word]) -> usize {
     registration_paint(data, Color::Black).0.len()
 }
 
-fn stage2(data: &[Word]) {
+fn stage2(data: &[Word]) -> String {
     let (painted, min, max) = registration_paint(data, Color::White);
 
     // min is lower left corner, max is upper right
@@ -79,14 +79,18 @@ fn stage2(data: &[Word]) {
     let top_left = Point { x: min.x.min(max.x), y: min.y.max(max.y) };
     let lower_right = Point { x: min.x.max(max.x), y: max.y.min(min.y) };
 
+    let mut ret = String::new();
+
     for y in lower_right.y ..= top_left.y {
         for x in top_left.x ..= lower_right.x {
             let color = painted.get(&Point { x, y }).unwrap_or(&Color::Black);
-            print!("{}", if color == &Color::Black { 'X' } else { ' ' });
+            ret += if color == &Color::Black { "X" } else { " " };
         }
 
-        println!();
+        ret += "\n"
     }
+
+    ret
 }
 
 fn registration_paint(data: &[Word], start_on: Color) -> (HashMap<Point<isize>, Color>, Point<isize>, Point<isize>) {
@@ -157,4 +161,18 @@ fn registration_paint(data: &[Word], start_on: Color) -> (HashMap<Point<isize>, 
 #[test]
 fn full_stage1() {
     intcode::with_parsed_program(|data| assert_eq!(stage1(data), 2883));
+}
+
+#[test]
+fn full_stage2() {
+    let expected =
+"\
+X XXXX    X   XXX  XX   XX XXXXX  XX    XXX
+X XXXX XXXX XX X XX X XX X XXXX XX XXXX XXX
+X XXXX   XX XX X XXXX XX X XXXX XXXXXX XXXX
+X XXXX XXXX   XX XXXX   XX XXXX X  XX XXXXX
+X XXXX XXXX XXXX XX X XXXX XXXX XX X XXXXXX
+X    X    X XXXXX  XX XXXX    XX   X    XXX".trim();
+
+    intcode::with_parsed_program(|data| assert_eq!(stage2(data), expected));
 }
