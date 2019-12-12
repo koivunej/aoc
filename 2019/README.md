@@ -29,3 +29,5 @@ rebase [an older PR](https://github.com/petgraph/petgraph/pull/151) to get the
 transitive closure algorithm.
 
 Day11: Further `intcode` memory abstraction with custom `Cow` type. Can't remember why.
+
+Day12: `num` crate, threading, SoA, maybe SIMD enabled computation?
