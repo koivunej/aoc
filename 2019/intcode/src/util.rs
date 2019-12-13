@@ -6,7 +6,11 @@ pub enum ParsingError {
     Int(std::num::ParseIntError, usize, String),
 }
 
-pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<Word>, ParsingError> {
+pub fn parse_program<R: std::io::BufRead>(r: R) -> Result<Vec<Word>, ParsingError> {
+    parse_program_n_lines(r, None)
+}
+
+pub fn parse_program_n_lines<R: std::io::BufRead>(mut r: R, lines: Option<usize>) -> Result<Vec<Word>, ParsingError> {
     use std::str::FromStr;
 
     let mut data = vec![];
@@ -14,6 +18,13 @@ pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<Word>, Parsing
     let mut line = 0;
 
     loop {
+        match lines {
+            Some(max) if line == max => {
+                return Ok(data);
+            }
+            _ => {},
+        }
+
         buffer.clear();
         let bytes = r
             .read_line(&mut buffer)
@@ -39,10 +50,14 @@ pub fn parse_program<R: std::io::BufRead>(mut r: R) -> Result<Vec<Word>, Parsing
 }
 
 pub fn parse_stdin_program() -> Vec<Word> {
+    parse_stdin_program_n_lines(None)
+}
+
+pub fn parse_stdin_program_n_lines(n: Option<usize>) -> Vec<Word> {
     let stdin = std::io::stdin();
     let locked = stdin.lock();
 
-    match parse_program(locked) {
+    match parse_program_n_lines(locked, n) {
         Ok(data) => data,
         Err(ParsingError::Io(e, line)) => {
             eprintln!("Failed to read stdin near line {}: {}", line, e);

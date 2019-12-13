@@ -1,6 +1,6 @@
 mod instr;
 mod error;
-mod util;
+pub mod util;
 mod env;
 mod exec;
 
