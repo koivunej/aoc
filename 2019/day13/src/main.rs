@@ -261,35 +261,6 @@ fn stage2(data: &[Word]) -> Word {
             ExecutionState::HaltedAt(_regs) => break,
             ExecutionState::InputIO(io) => {
 
-                // NOT stage2
-                /*
-                let points_remaining: usize = disp.cells.iter().filter(|t| **t == TileKind::Block)
-                    .enumerate()
-                    .map(|(i, _)| i + 19)
-                    .sum();
-
-                println!("points remaining: {}", points_remaining);
-                */
-
-                /*
-                println!("Left/Middle/Right? ");
-                let input: Word;
-
-                loop {
-                    input_buffer.clear();
-                    let _bytes = std::io::stdin().read_line(&mut input_buffer).unwrap();
-
-                    input = match input_buffer.trim() {
-                        "L" | "l" => -1,
-                        "M" | "m" => 0,
-                        "R" | "r" => 1,
-                        _ => continue,
-                    };
-                    break;
-                }*/
-
-                println!("Score: {}", score);
-
                 let dx = match (last_ball_pos, last_paddle_pos) {
                     (Some((bp, _)), Some((pp, _))) => bp.0 - pp.0,
                     _ => 0,
@@ -329,7 +300,7 @@ fn stage2(data: &[Word]) -> Word {
                     disp.insert(&(x, y), kind);
 
                     if render && last_ball_pos.as_ref().map(|(_, rnd)| *rnd) == last_paddle_pos.as_ref().map(|(_, rnd)| *rnd) {
-                        println!("{}", disp);
+                        print!("{}{}{}", termion::clear::All, termion::cursor::Goto(1, 1), disp);
                         std::thread::sleep(std::time::Duration::from_millis(10));
                     }
                 }
