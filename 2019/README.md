@@ -31,3 +31,5 @@ transitive closure algorithm.
 Day11: Further `intcode` memory abstraction with custom `Cow` type. Can't remember why.
 
 Day12: `num` crate, threading, SoA, maybe SIMD enabled computation?
+
+Day13: Peak complexity "game display" (adaptive 2d board)
