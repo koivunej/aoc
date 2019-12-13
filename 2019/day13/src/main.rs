@@ -248,26 +248,18 @@ fn stage2(data: &[Word]) -> Word {
     let mut input_buffer = String::new();
 
     let mut score = 0;
-    let mut dirty = true;
+    let mut render = true;
 
-    let mut last_ball_pos = None;
-    let mut last_paddle_pos = None;
+    let mut last_ball_pos: Option<((Word, Word), usize)> = None;
+    let mut last_paddle_pos: Option<((Word, Word), usize)> = None;
+
+    let mut round = 0;
 
     loop {
         regs = match program.eval_from_instruction(regs).unwrap() {
             ExecutionState::Paused(_regs) => unreachable!("Pausing not implemented yet?"),
             ExecutionState::HaltedAt(_regs) => break,
             ExecutionState::InputIO(io) => {
-
-                if dirty {
-                    dirty = false;
-                    println!("{}", disp);
-                }
-
-                println!("Score: {}", score);
-
-                println!("Left/Middle/Right? ");
-
 
                 // NOT stage2
                 /*
@@ -279,6 +271,8 @@ fn stage2(data: &[Word]) -> Word {
                 println!("points remaining: {}", points_remaining);
                 */
 
+                /*
+                println!("Left/Middle/Right? ");
                 let input: Word;
 
                 loop {
@@ -292,15 +286,23 @@ fn stage2(data: &[Word]) -> Word {
                         _ => continue,
                     };
                     break;
-                }
+                }*/
 
-                program.handle_input_completion(io, input).unwrap()
+                println!("Score: {}", score);
+
+                let dx = match (last_ball_pos, last_paddle_pos) {
+                    (Some((bp, _)), Some((pp, _))) => bp.0 - pp.0,
+                    _ => 0,
+                };
+
+                round += 1;
+                program.handle_input_completion(io, dx.signum()).unwrap()
             },
             ExecutionState::OutputIO(io, value) => {
 
                 buffer.push_back(value);
 
-                while buffer.len() > 3 {
+                while buffer.len() >= 3 {
                     let x = buffer.pop_front().unwrap();
                     let y = buffer.pop_front().unwrap();
                     let value = buffer.pop_front().unwrap();
@@ -310,18 +312,26 @@ fn stage2(data: &[Word]) -> Word {
                         continue;
                     }
 
+                    let prev = *disp.get(&(x, y))
+                        .unwrap_or(&TileKind::Empty);
+
                     let kind = TileKind::try_from(value).unwrap();
 
-                    match kind {
-                        TileKind::Ball => last_ball_pos = Some((x, y)),
-                        TileKind::Paddle => last_paddle_pos = Some((x, y)),
+                    let mut render = false;
+
+                    match (prev, kind) {
+                        (_, TileKind::Ball) => { render = true; last_ball_pos = Some(((x, y), round)); },
+                        (_, TileKind::Paddle) => { render = true; last_paddle_pos = Some(((x, y), round)); },
+                        (TileKind::Ball, TileKind::Empty) => render = false,
                         _ => {},
                     }
 
                     disp.insert(&(x, y), kind);
-                    println!("{}", disp);
-                    dirty = false;
-                    std::thread::sleep(std::time::Duration::from_millis(10));
+
+                    if render && last_ball_pos.as_ref().map(|(_, rnd)| *rnd) == last_paddle_pos.as_ref().map(|(_, rnd)| *rnd) {
+                        println!("{}", disp);
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
                 }
 
                 program.handle_output_completion(io)
