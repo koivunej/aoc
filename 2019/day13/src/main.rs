@@ -245,10 +245,8 @@ fn stage2(data: &[Word]) -> Word {
     let mut regs = Registers::default();
 
     let mut buffer = VecDeque::new();
-    let mut input_buffer = String::new();
 
     let mut score = 0;
-    let mut render = true;
 
     let mut last_ball_pos: Option<((Word, Word), usize)> = None;
     let mut last_paddle_pos: Option<((Word, Word), usize)> = None;
@@ -346,25 +344,22 @@ fn gamedisplay_grows() {
     assert_eq!((gd.width(), gd.height()), (4, 4));
     assert_eq!(format!("{}", gd).as_str(), "X   \n XXX\n  O \n   X");
 
-    assert_eq!(Some(&TileKind::Block), gd.get(&(-1, -1)));
-    assert_eq!(Some(&TileKind::Empty), gd.get(&( 0, -1)));
-    assert_eq!(Some(&TileKind::Empty), gd.get(&( 1, -1)));
-    assert_eq!(Some(&TileKind::Empty), gd.get(&( 2, -1)));
+    let mut contents = vec![TileKind::Empty; 16];
+    contents[0] = TileKind::Block;
+    contents[5] = TileKind::Block;
+    contents[6] = TileKind::Block;
+    contents[7] = TileKind::Block;
+    contents[10] = TileKind::Ball;
+    contents[15] = TileKind::Block;
 
-    assert_eq!(Some(&TileKind::Empty), gd.get(&(-1,  0)));
-    assert_eq!(Some(&TileKind::Block), gd.get(&( 0,  0)));
-    assert_eq!(Some(&TileKind::Block), gd.get(&( 1,  0)));
-    assert_eq!(Some(&TileKind::Block), gd.get(&( 2,  0)));
+    let checks = (-1..3).into_iter()
+        .flat_map(|y| ((-1..3).into_iter().map(move |x| (x, y))))
+        .enumerate();
 
-    assert_eq!(Some(&TileKind::Empty), gd.get(&(-1,  1)));
-    assert_eq!(Some(&TileKind::Empty), gd.get(&( 0,  1)));
-    assert_eq!(Some(&TileKind::Ball),  gd.get(&( 1,  1)));
-    assert_eq!(Some(&TileKind::Empty), gd.get(&( 2,  1)));
-
-    assert_eq!(Some(&TileKind::Empty), gd.get(&(-1,  2)));
-    assert_eq!(Some(&TileKind::Empty), gd.get(&( 0,  2)));
-    assert_eq!(Some(&TileKind::Empty), gd.get(&( 1,  2)));
-    assert_eq!(Some(&TileKind::Block), gd.get(&( 2,  2)));
+    for (i, (x, y)) in checks {
+        println!("{} ({}, {})", i, x, y);
+        assert_eq!(contents.get(i), gd.get(&(x, y)), "Failed at index {} or ({}, {})", i, x, y);
+    }
 
     for y in -1..4 {
         assert_eq!(None, gd.get(&(-2, y)));
