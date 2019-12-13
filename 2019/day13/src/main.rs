@@ -39,6 +39,7 @@ enum TileKind {
 }
 
 impl TileKind {
+    #[allow(dead_code)]
     fn is_indestructible(&self) -> bool {
         match *self {
             TileKind::Wall | TileKind::Paddle | TileKind::Ball => true,
@@ -88,7 +89,6 @@ struct GameDisplay {
 impl fmt::Display for GameDisplay {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         let width = self.width();
-        let mut offset = 0;
 
         let mut any_newline = false;
 
@@ -131,14 +131,11 @@ impl GameDisplay {
         }
     }
 
-    fn to_coordinates(&self, index: &usize) -> (Word, Word) {
-        unimplemented!()
-    }
-
     fn width(&self) -> usize {
         self.width
     }
 
+    #[allow(dead_code)]
     fn height(&self) -> usize {
         self.height
     }
@@ -224,12 +221,10 @@ impl GameDisplay {
                 self.smallest_coordinates.1 += dy;
             }
             self.height += dy.abs() as usize;
-            continue;
-
-            unimplemented!()
         }
     }
 
+    #[allow(dead_code)]
     fn get(&self, p: &(Word, Word)) -> Option<&TileKind> {
         self.to_index(p)
             .and_then(|index| self.cells.get(index))
@@ -253,7 +248,10 @@ fn stage2(data: &[Word]) -> Word {
     let mut input_buffer = String::new();
 
     let mut score = 0;
-    let mut dirty = false;
+    let mut dirty = true;
+
+    let mut last_ball_pos = None;
+    let mut last_paddle_pos = None;
 
     loop {
         regs = match program.eval_from_instruction(regs).unwrap() {
@@ -270,11 +268,22 @@ fn stage2(data: &[Word]) -> Word {
 
                 println!("Left/Middle/Right? ");
 
+
+                // NOT stage2
+                /*
+                let points_remaining: usize = disp.cells.iter().filter(|t| **t == TileKind::Block)
+                    .enumerate()
+                    .map(|(i, _)| i + 19)
+                    .sum();
+
+                println!("points remaining: {}", points_remaining);
+                */
+
                 let input: Word;
 
                 loop {
                     input_buffer.clear();
-                    let bytes = std::io::stdin().read_line(&mut input_buffer).unwrap();
+                    let _bytes = std::io::stdin().read_line(&mut input_buffer).unwrap();
 
                     input = match input_buffer.trim() {
                         "L" | "l" => -1,
@@ -284,7 +293,7 @@ fn stage2(data: &[Word]) -> Word {
                     };
                     break;
                 }
-                println!("input read ok, continuing execution");
+
                 program.handle_input_completion(io, input).unwrap()
             },
             ExecutionState::OutputIO(io, value) => {
@@ -302,6 +311,13 @@ fn stage2(data: &[Word]) -> Word {
                     }
 
                     let kind = TileKind::try_from(value).unwrap();
+
+                    match kind {
+                        TileKind::Ball => last_ball_pos = Some((x, y)),
+                        TileKind::Paddle => last_paddle_pos = Some((x, y)),
+                        _ => {},
+                    }
+
                     disp.insert(&(x, y), kind);
                     println!("{}", disp);
                     dirty = false;
