@@ -1,9 +1,10 @@
 use std::collections::HashSet;
+use std::convert::TryFrom;
 use std::fmt;
-use intcode::{parse_stdin_program, Program, Environment, Word};
+use intcode::{util::parse_stdin_program_n_lines, Program, Environment, Word, ExecutionState, Registers};
 
 fn main() {
-    let data = parse_stdin_program();
+    let data = parse_stdin_program_n_lines(Some(1));
 
     println!("stage1: {}", stage1(&data[..]));
     println!("stage2: {}", stage2(&data[..]));
@@ -43,6 +44,21 @@ impl TileKind {
             TileKind::Wall | TileKind::Paddle | TileKind::Ball => true,
             _ => false
         }
+    }
+}
+
+impl TryFrom<Word> for TileKind {
+    type Error = Word;
+
+    fn try_from(w: Word) -> Result<Self, Self::Error> {
+        Ok(match w {
+            0 => TileKind::Empty,
+            1 => TileKind::Wall,
+            2 => TileKind::Block,
+            3 => TileKind::Paddle,
+            4 => TileKind::Ball,
+            x => return Err(x),
+        })
     }
 }
 
@@ -94,14 +110,6 @@ impl fmt::Display for GameDisplay {
 }
 
 impl GameDisplay {
-    /*fn contains(&self, p: &(Word, Word)) -> bool {
-        let (x, y) = *p;
-        x >= self.smallest_coordinates.0
-            && y >= self.smallest_coordinates.1
-            && x < self.smallest_coordinates.0 + self.width as Word
-            && y < self.smallest_coordinates.1 + self.height as Word
-    }*/
-
     fn to_index(&self, p: &(Word, Word)) -> Option<usize> {
         let (x, y) = *p;
         let w = self.width as Word;
@@ -148,17 +156,15 @@ impl GameDisplay {
 
             // this could be Result<index, OutsideCoordinates::Before(Word, Word)> where err would be "how much outside"
             if let Some(index) = self.to_index(p) {
+                //if self.cells[index].is_indestructible() && self.cells[index] != t {
+                //    panic!("Attempting to overwrite indestructible {:?} at {:?} with {:?}", self.cells[index], p, t);
+                //}
                 self.cells[index] = t;
                 return;
             }
 
             let (x, y) = *p;
-
-            println!("thinking of growing for {:?} with {}x{} and 0 at {:?}", (x, y), self.width, self.height, self.smallest_coordinates);
-
             let (mut dx, mut dy) = (x - self.smallest_coordinates.0, y - self.smallest_coordinates.1);
-
-            println!("maybe need to grow {:?}", (dx, dy));
 
             if dx > 0 {
                 dx -= self.width as Word;
@@ -174,8 +180,7 @@ impl GameDisplay {
                 assert!(dy >= 0);
             }
 
-            println!("need to grow: {:?}", (dx, dy));
-            println!("{:?}", self.cells);
+            assert!(dx != 0 || dy != 0, "Both directions became zero for {:?} when {}x{} and {:?}", p, self.width, self.height, self.smallest_coordinates);
 
             if dx != 0 {
                 // we need to grow columns
@@ -190,7 +195,7 @@ impl GameDisplay {
                             self.cells.push(TileKind::Empty);
                         }
                     }
-                    self.cells.extend(next.drain(dbg!(..self.width)));
+                    self.cells.extend(next.drain(..self.width));
                     if dx > 0 {
                         for _ in 0..dx.abs() {
                             self.cells.push(TileKind::Empty);
@@ -205,25 +210,21 @@ impl GameDisplay {
                 continue;
             }
 
-            if dy != 0 {
-                // need to prepend lines
-                let mut next = vec![TileKind::Empty; self.width() * dy.abs() as usize];
-                if dy < 0 {
-                    next.reserve(self.cells.len());
-                    std::mem::swap(&mut self.cells, &mut next);
-                    // names get confusing here but for a while "next" contains our previous cells
-                    // which are then moved to the end of the game board
-                }
-                self.cells.extend(next.into_iter());
-
-                if dy < 0 {
-                    self.smallest_coordinates.1 += dy;
-                }
-                self.height += dy.abs() as usize;
-                continue;
+            // need to prepend lines
+            let mut next = vec![TileKind::Empty; self.width() * dy.abs() as usize];
+            if dy < 0 {
+                next.reserve(self.cells.len());
+                std::mem::swap(&mut self.cells, &mut next);
+                // names get confusing here but for a while "next" contains our previous cells
+                // which are then moved to the end of the game board
             }
+            self.cells.extend(next.into_iter());
 
-            dbg!((dx, dy));
+            if dy < 0 {
+                self.smallest_coordinates.1 += dy;
+            }
+            self.height += dy.abs() as usize;
+            continue;
 
             unimplemented!()
         }
@@ -236,10 +237,85 @@ impl GameDisplay {
 }
 
 fn stage2(data: &[Word]) -> Word {
+    use std::collections::VecDeque;
+    println!();
+
     let mut data = data.to_vec();
     data[0] = 2; // infinite coins
 
-    unimplemented!();
+    let mut program = Program::wrap(&mut data)
+        .with_memory_expansion();
+
+    let mut disp = GameDisplay::default();
+    let mut regs = Registers::default();
+
+    let mut buffer = VecDeque::new();
+    let mut input_buffer = String::new();
+
+    let mut score = 0;
+    let mut dirty = false;
+
+    loop {
+        regs = match program.eval_from_instruction(regs).unwrap() {
+            ExecutionState::Paused(_regs) => unreachable!("Pausing not implemented yet?"),
+            ExecutionState::HaltedAt(_regs) => break,
+            ExecutionState::InputIO(io) => {
+
+                if dirty {
+                    dirty = false;
+                    println!("{}", disp);
+                }
+
+                println!("Score: {}", score);
+
+                println!("Left/Middle/Right? ");
+
+                let input: Word;
+
+                loop {
+                    input_buffer.clear();
+                    let bytes = std::io::stdin().read_line(&mut input_buffer).unwrap();
+
+                    input = match input_buffer.trim() {
+                        "L" | "l" => -1,
+                        "M" | "m" => 0,
+                        "R" | "r" => 1,
+                        _ => continue,
+                    };
+                    break;
+                }
+                println!("input read ok, continuing execution");
+                program.handle_input_completion(io, input).unwrap()
+            },
+            ExecutionState::OutputIO(io, value) => {
+
+                buffer.push_back(value);
+
+                while buffer.len() > 3 {
+                    let x = buffer.pop_front().unwrap();
+                    let y = buffer.pop_front().unwrap();
+                    let value = buffer.pop_front().unwrap();
+
+                    if x == -1 && y == 0 {
+                        score = value;
+                        continue;
+                    }
+
+                    let kind = TileKind::try_from(value).unwrap();
+                    disp.insert(&(x, y), kind);
+                    println!("{}", disp);
+                    dirty = false;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+
+                program.handle_output_completion(io)
+            },
+        };
+    }
+
+    println!();
+
+    score
 }
 
 #[test]
