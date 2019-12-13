@@ -21,17 +21,9 @@ fn stage1(data: &[Word]) -> usize {
     let collected = env.unwrap_collected();
 
     let mut uniq = HashSet::new();
-    let mut min: Option<(Word, Word)> = None;
-    let mut max: Option<(Word, Word)> = None;
     for p in collected.chunks(3).filter(|chunk| chunk[2] == 2).map(|chunk| (chunk[0], chunk[1])) {
         uniq.insert(p);
-
-        min = min.map(|(mx, my)| (mx.min(p.0), my.min(p.1))).or(Some((p.0, p.1)));
-        max = max.map(|(mx, my)| (mx.max(p.0), my.max(p.1))).or(Some((p.0, p.1)));
     }
-
-    let bounds = (min, max);
-    dbg!(bounds);
 
     uniq.len()
 }
