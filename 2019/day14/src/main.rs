@@ -6,9 +6,13 @@ fn main() {
     let locked = stdin.lock();
 
     let ctx = Context::parse(BufReadWrapper(locked));
-    println!("stage1: {}", stage1(&ctx));
+    let ore_for_one_fuel = stage1(&ctx);
+
+    println!("stage1: {}", ore_for_one_fuel);
+    println!("stage2: {} ORE", fuel_for_ore(&ctx, 1_000_000_000_000));
 }
 
+/// Wanted to do randomized testing so ended up creating this.
 trait HorribleLineAbstraction {
     fn for_lines<F: FnMut(Option<&str>)>(self, f: F);
 }
@@ -90,17 +94,19 @@ impl Context {
 }
 
 fn stage1(ctx: &Context) -> usize {
+    ore_for_fuel(ctx, 1)
+}
 
-    let mut used: Vec<Option<usize>> = Vec::new();
-    let mut leftovers: Vec<usize> = Vec::new();
+fn ore_for_fuel(ctx: &Context, fuel: usize) -> usize {
 
-    used.resize(ctx.len() + 1, None);
-    leftovers.resize(ctx.len() + 1, 0);
+    let mut used: Vec<Option<usize>> = vec![None; ctx.len() + 1];
+    let mut leftovers: Vec<usize> = vec![0; ctx.len() + 1];
+    let mut totals: Vec<usize> = vec![0; ctx.len() + 1];
 
     let fuel_at = ctx.interned["FUEL"];
     {
-        used[fuel_at] = Some(1);
-        ctx.produced[&fuel_at].explode(&mut used, &mut leftovers);
+        used[fuel_at] = Some(fuel);
+        ctx.produced[&fuel_at].explode(&mut used, &mut leftovers, &mut totals);
     }
 
     let mut round_productions = Vec::new();
@@ -108,10 +114,6 @@ fn stage1(ctx: &Context) -> usize {
     let ore_at = ctx.interned["ORE"];
 
     loop {
-        for (k, v) in &ctx.interned {
-            println!("{:>8} {:>8} {:>8}", used[*v].unwrap_or(0), leftovers[*v], k);
-        }
-
         let productions = used.iter()
             .enumerate()
             .filter(|(_, c)| match c {
@@ -141,31 +143,49 @@ fn stage1(ctx: &Context) -> usize {
             round_productions.retain(|p| !p.all_are_new(&used));
         }
 
-        println!("productions : {:?}", round_productions.as_slice());
-        println!("used        : {:?}", used.as_slice());
-        println!("leftovers   : {:?}", leftovers.as_slice());
-
         for p in round_productions.drain(..) {
             // explode will set it's own coefficient to zero which will make us filter it out in
             // the next run
-            p.explode(&mut used, &mut leftovers);
+            p.explode(&mut used, &mut leftovers, &mut totals);
             // cannot add to processed ... which is interesting, perhaps few need to be processed
             // multiple times?
         }
     }
 
-    /*
-    for (k, v) in &interned {
-        println!("{:>6?} {:>4}", coefficients[*v], k);
-    }
-    */
+    assert_eq!(
+        used.iter().filter(|c| c.unwrap_or(0) > 0).count(),
+        1,
+        "there should only be the ore coefficient non-zero");
 
-    // there should only be the ORE coefficient
-    let zero = 0;
-    assert_eq!(used.iter().filter(|c| c.unwrap_or(zero) > zero).count(), 1);
-
-    //assert!(coefficients[ore_at].unwrap().is_integer());
     used[ore_at].unwrap() as usize
+}
+
+fn fuel_for_ore(ctx: &Context, ore: usize) -> usize {
+
+    let mut min = 1;
+    let mut max = ore;
+
+    let mut prev = 1;
+    loop {
+        let mid = (min + max) / 2;
+        let amount = ore_for_fuel(&ctx, mid);
+
+        if amount < ore {
+            min = mid;
+        } else if amount > ore {
+            max = mid;
+        }
+
+        if prev == amount {
+            return mid;
+        }
+
+        if min == max {
+            return mid;
+        }
+
+        prev = amount;
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -176,7 +196,7 @@ struct Production {
 }
 
 impl Production {
-    fn explode(&self, r: &mut Vec<Option<usize>>, l: &mut Vec<usize>) {
+    fn explode(&self, r: &mut Vec<Option<usize>>, l: &mut Vec<usize>, t: &mut Vec<usize>) {
         // make sure our index is valid
         let our_need = r[self.id].unwrap() - l[self.id];
 
@@ -193,12 +213,12 @@ impl Production {
 
             let our_need = would_reserve;
 
-            println!("{}: processing req({}) {} and {}", self.id, req.id, r.len(), l.len());
+            // println!("{}: processing req({}) {} and {}", self.id, req.id, r.len(), l.len());
 
             match (r.get_mut(req.id).unwrap(), l.get_mut(req.id).unwrap()) {
                 (Some(ref mut reserved), ref mut leftovers) => {
                     if our_need <= **leftovers {
-                        println!("req({}) using {}/{} leftovers", req.id, our_need, **leftovers);
+                        //println!("req({}) using {}/{} leftovers", req.id, our_need, **leftovers);
                         **leftovers -= our_need;
                     } else {
                         let total_need = our_need + *reserved - **leftovers;
@@ -213,6 +233,7 @@ impl Production {
             };
         }
 
+        t[self.id] = r[self.id].unwrap();
         r[self.id] = Some(0);
         l[self.id] = times * self.amount - our_need;
     }
@@ -250,7 +271,7 @@ fn explode_first() {
 
     used[0] = Some(1);
 
-    p.explode(&mut used, &mut reserved);
+    p.explode(&mut used, &mut reserved, &mut vec![0; 6]);
 
     assert_eq!((used[0], reserved[0]), (Some(0),  0), "FUEL");
     assert_eq!((used[1], reserved[1]), (Some(7),  0), "A");
@@ -278,7 +299,7 @@ fn explode_second() {
 
     assert_eq!(used.len(), reserved.len());
 
-    p.explode(&mut used, &mut reserved);
+    p.explode(&mut used, &mut reserved, &mut vec![0; 5]);
 
     // to have 6D we need to build 2*5D which needs 2*3A + 2*7B
     // in the end we are left with 2*5D - 6D = 4D
@@ -316,7 +337,51 @@ fn stage1_example0() {
 7 A, 1 E => 1 FUEL
 ";
 
-    assert_eq!(31, stage1(&Context::parse(wrap_into_bufreader(input))));
+    let ctx = Context::parse(wrap_into_bufreader(input));
+    assert_eq!(31, stage1(&ctx));
+
+//              x ORE
+//              |
+//          /--/ \--\
+//         |         |
+//       10 A       1 B
+// (28 A)  |         |
+//         |   7 A   | 1 B
+//         +---------+
+//         |         |
+//         |        1 C
+//         |   7 A   |
+//         +---------+
+//         |         |
+//         |        1 D
+//         |   7 A   |
+//         +---------+
+//         |         |
+//         |        1 E
+//         |   7 A   |
+//         \---------+
+//                   |
+//                1 FUEL
+
+    // 10 ORE => 10 A ---> 0
+    // 11 ORE => 11 A ---> 1 FUEL + 10 A + 1 B + 0 ORE
+    // 21 ORE => 21 A ---> 1 FUEL + 20 A + 1 B + 0 ORE
+    // 31 ORE => 31 A ---> 1 FUEL +  2 A + 0 B + 0 ORE
+    // 41 ORE => 41 A ---> 1 FUEL + 12 A + 1 B + 0 ORE
+    // 51 ORE => 51 A ---> 1 FUEL + 22 A + 1 B + 0 ORE
+    // 53 ORE => 53 A ---> 1 FUEL + 22 A + 1 B + 2 ORE
+    // 55 ORE => 55 A ---> 1 FUEL + 22 A + 1 B + 4 ORE
+    // 57 ORE => 57 A ---> 1 FUEL + 22 A + 1 B + 6 ORE
+    // 59 ORE => 59 A ---> 1 FUEL + 22 A + 1 B + 8 ORE
+    // 60 ORE => 60 A ---> 2 FUEL +  4 A + 0 B + 0 ORE
+    // 61 ORE => 61 A ---> 2 FUEL +  4 A + 1 B + 0 ORE
+    for ore in 31..62 {
+        assert_eq!(1, fuel_for_ore(&ctx, ore), "{} ORE", ore);
+    }
+
+    for ore in 62..93 {
+        assert_eq!(2, fuel_for_ore(&ctx, ore), "{} ORE", ore);
+    }
 }
 
 #[test]
@@ -347,8 +412,9 @@ fn stage1_example2() {
 165 ORE => 2 GPVTF
 3 DCFZ, 7 NZVS, 5 HKGWZ, 10 PSHF => 8 KHKGT
 ";
-
-    assert_eq!(13312, stage1(&Context::parse(wrap_into_bufreader(input))));
+    let ctx = Context::parse(wrap_into_bufreader(input));
+    assert_eq!(13312, stage1(&ctx));
+    assert_eq!(82892753, fuel_for_ore(&ctx, 1_000_000_000_000));
 }
 
 #[test]
@@ -368,7 +434,9 @@ fn stage1_example3() {
 176 ORE => 6 VJHF
 ";
 
-    assert_eq!(180697, stage1(&Context::parse(wrap_into_bufreader(input))));
+    let ctx = Context::parse(wrap_into_bufreader(input));
+    assert_eq!(180697, stage1(&ctx));
+    assert_eq!(5586022, fuel_for_ore(&ctx, 1_000_000_000_000));
 }
 
 #[test]
@@ -399,9 +467,10 @@ fn stage1_example4() {
 
     for _ in 0..100 {
         lines.shuffle(&mut rng);
-
         assert_eq!(2210736, stage1(&Context::parse(lines.as_slice())));
     }
+
+    assert_eq!(460664, fuel_for_ore(&Context::parse(lines.as_slice()), 1_000_000_000_000));
 }
 
 #[test]
@@ -413,14 +482,8 @@ fn stage1_does_not_show_the_issue() {
 3 A, 7 B => 5 D
 7 A, 11 C, 6 D => 1 FUEL
 ";
-    // 1 FUEL:   7, 0, 11
-    //         7+6, 9, 0
-    //          13, 9
-    //      -------------
-    //           5  5 ==> 10
-
     let lines = input.lines().map(String::from).collect::<Vec<_>>();
-    // not sure of this 19
+    // not sure of this 19, seems to be :)
     assert_eq!(19, stage1(&Context::parse(lines.as_slice())));
 }
 
@@ -433,4 +496,10 @@ fn wrap_into_bufreader(s: &[u8]) -> BufReadWrapper<std::io::BufReader<std::io::C
 fn full_stage1() {
     let ctx = Context::parse(BufReadWrapper(std::io::BufReader::new(std::fs::File::open("input").unwrap())));
     assert_eq!(stage1(&ctx), 1967319);
+}
+
+#[test]
+fn full_stage2() {
+    let ctx = Context::parse(BufReadWrapper(std::io::BufReader::new(std::fs::File::open("input").unwrap())));
+    assert_eq!(fuel_for_ore(&ctx, 1_000_000_000_000), 1122036);
 }
