@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::BufRead;
 
 fn main() {
@@ -93,16 +93,14 @@ fn stage1(ctx: &Context) -> usize {
 
     let mut used: Vec<Option<usize>> = Vec::new();
     let mut leftovers: Vec<usize> = Vec::new();
-    let mut processed = HashSet::new();
 
     used.resize(ctx.len() + 1, None);
     leftovers.resize(ctx.len() + 1, 0);
 
+    let fuel_at = ctx.interned["FUEL"];
     {
-        let fuel = ctx.interned["FUEL"];
-        used[fuel] = Some(1);
-        ctx.produced[&fuel].explode(&mut used, &mut leftovers);
-        processed.insert(fuel);
+        used[fuel_at] = Some(1);
+        ctx.produced[&fuel_at].explode(&mut used, &mut leftovers);
     }
 
     let mut round_productions = Vec::new();
@@ -122,7 +120,7 @@ fn stage1(ctx: &Context) -> usize {
                 None => false,
                 _ => true,
             })
-            .filter(|(i, _)| !processed.contains(&i))
+            .filter(|(i, _)| *i != fuel_at)
             // fetch recipe
             .filter_map(|(i, _)| ctx.produced.get(&i));
 
@@ -151,7 +149,8 @@ fn stage1(ctx: &Context) -> usize {
             // explode will set it's own coefficient to zero which will make us filter it out in
             // the next run
             p.explode(&mut used, &mut leftovers);
-            // cannot add to used ... which is interesting
+            // cannot add to processed ... which is interesting, perhaps few need to be processed
+            // multiple times?
         }
     }
 
@@ -203,16 +202,12 @@ impl Production {
                         **leftovers -= our_need;
                     } else {
                         let total_need = our_need + *reserved - **leftovers;
-                        println!("req({}) total need is {} + {} - {} = {}", req.id, our_need, *reserved, **leftovers, total_need);
-                        println!("req({}) reserved = {} + {} * {} = {} + {}", req.id, *reserved, times, req.amount, *reserved, times * req.amount);
                         *reserved += times * req.amount;
-                        println!("req({}) leftovers = {} - {}", req.id, reserved, total_need);
                         **leftovers = *reserved - total_need;
                     }
                 },
                 (ref mut x, ref mut leftovers) => {
                     **x = Some(would_reserve);
-                    println!("req({}): {} - {}", req.id, would_reserve, our_need);
                     **leftovers = would_reserve - our_need;
                 }
             };
