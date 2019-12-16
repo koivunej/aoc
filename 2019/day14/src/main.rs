@@ -164,9 +164,8 @@ struct Production {
 
 impl Production {
     fn explode(&self, r: &mut Vec<Option<usize>>, l: &mut Vec<usize>) {
-        assert_eq!(r.len(), l.len());
         // make sure our index is valid
-        let our_need = r[self.id].unwrap();
+        let our_need = r[self.id].unwrap() - l[self.id];
 
         let times = if our_need > 1 {
             // ceiling div
@@ -185,7 +184,7 @@ impl Production {
 
             match (r.get_mut(req.id).unwrap(), l.get_mut(req.id).unwrap()) {
                 (Some(ref mut reserved), ref mut leftovers) => {
-                    if our_need < **leftovers {
+                    if our_need <= **leftovers {
                         println!("req({}) using {}/{} leftovers", req.id, our_need, **leftovers);
                         **leftovers -= our_need;
                     } else {
