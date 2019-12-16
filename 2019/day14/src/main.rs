@@ -1,11 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::BufRead;
 
 fn main() {
     let stdin = std::io::stdin();
     let locked = stdin.lock();
 
-    println!("stage1: {}", stage1(BufReadWrapper(locked)));
+    let ctx = Context::parse(BufReadWrapper(locked));
+    println!("stage1: {}", stage1(&ctx));
 }
 
 trait HorribleLineAbstraction {
@@ -38,67 +39,78 @@ impl<'a, T: AsRef<str> + 'a> HorribleLineAbstraction for &'a [T] {
     }
 }
 
-fn stage1<R: HorribleLineAbstraction>(br: R) -> usize {
+struct Context {
+    interned: HashMap<String, usize>,
+    produced: HashMap<usize, Production>,
+}
 
-    let mut interned = HashMap::new();
-    let mut produced = HashMap::new();
+impl Context {
+    fn parse<R: HorribleLineAbstraction>(br: R) -> Self {
+        let mut interned = HashMap::new();
+        let mut produced = HashMap::new();
+
+        br.for_lines(|maybe_line| {
+            let line = match maybe_line {
+                Some(line) => line,
+                None => return,
+            };
+
+            let mut top = line.trim()
+                .split(" => ");
+
+            let lhs = top.next().unwrap();
+            let rhs = top.next().unwrap();
+
+            let required = lhs.split(", ")
+                .map(|part| parse_ingredient(&mut interned, part).1)
+                .collect::<Vec<_>>();
+
+            let (_, product) = parse_ingredient(&mut interned, rhs);
+
+            let product = Production {
+                id: product.id,
+                amount: product.amount,
+                required
+            };
+
+            produced.insert(product.id, product);
+        });
+
+        assert_eq!(interned.len(), produced.len() + 1);
+
+        Context {
+            interned,
+            produced,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.interned.len()
+    }
+}
+
+fn stage1(ctx: &Context) -> usize {
+
     let mut used: Vec<Option<usize>> = Vec::new();
     let mut leftovers: Vec<usize> = Vec::new();
+    let mut processed = HashSet::new();
 
-    br.for_lines(|maybe_line| {
+    used.resize(ctx.len() + 1, None);
+    leftovers.resize(ctx.len() + 1, 0);
 
-        let line = match maybe_line {
-            Some(line) => line,
-            None => return,
-        };
-
-        let mut top = line.trim()
-            .split(" => ");
-
-        let lhs = top.next().unwrap();
-        let rhs = top.next().unwrap();
-
-        let required = lhs.split(", ")
-            .map(|part| parse_ingredient(&mut interned, part).1)
-            .collect::<Vec<_>>();
-
-        let (name, product) = parse_ingredient(&mut interned, rhs);
-
-        let product = Production {
-            id: product.id,
-            amount: product.amount,
-            required
-        };
-
-        if name == "FUEL" {
-            used.resize(used.len().max(product.id + 1), None);
-            leftovers.resize(used.len(), 0);
-            used[product.id] = Some(1);
-            product.explode(&mut used, &mut leftovers);
-        } else {
-            produced.insert(product.id, product);
-        }
-    });
-
-    used.resize(interned.len() + 1, None);
-    leftovers.resize(interned.len() + 1, 0);
-
-    assert_eq!(used.len(), leftovers.len());
+    {
+        let fuel = ctx.interned["FUEL"];
+        used[fuel] = Some(1);
+        ctx.produced[&fuel].explode(&mut used, &mut leftovers);
+        processed.insert(fuel);
+    }
 
     let mut round_productions = Vec::new();
 
-    let ore_at = interned["ORE"];
-
-    /*let _named = {
-        let mut named = HashMap::new();
-        for (k, v) in interned {
-            named.insert(v, k);
-        }
-        named
-    };*/
+    let ore_at = ctx.interned["ORE"];
 
     loop {
-        for (k, v) in &interned {
+        for (k, v) in &ctx.interned {
             println!("{:>8} {:>8} {:>8}", used[*v].unwrap_or(0), leftovers[*v], k);
         }
 
@@ -110,8 +122,9 @@ fn stage1<R: HorribleLineAbstraction>(br: R) -> usize {
                 None => false,
                 _ => true,
             })
+            .filter(|(i, _)| !processed.contains(&i))
             // fetch recipe
-            .filter_map(|(i, _)| produced.get(&i));
+            .filter_map(|(i, _)| ctx.produced.get(&i));
 
         round_productions.clear();
         round_productions.extend(productions);
@@ -138,6 +151,7 @@ fn stage1<R: HorribleLineAbstraction>(br: R) -> usize {
             // explode will set it's own coefficient to zero which will make us filter it out in
             // the next run
             p.explode(&mut used, &mut leftovers);
+            // cannot add to used ... which is interesting
         }
     }
 
@@ -307,7 +321,7 @@ fn stage1_example0() {
 7 A, 1 E => 1 FUEL
 ";
 
-    assert_eq!(31, stage1(wrap_into_bufreader(input)));
+    assert_eq!(31, stage1(&Context::parse(wrap_into_bufreader(input))));
 }
 
 #[test]
@@ -322,7 +336,7 @@ fn stage1_example1() {
 2 AB, 3 BC, 4 CA => 1 FUEL
 ";
 
-    assert_eq!(165, stage1(wrap_into_bufreader(input)));
+    assert_eq!(165, stage1(&Context::parse(wrap_into_bufreader(input))));
 }
 
 #[test]
@@ -339,7 +353,7 @@ fn stage1_example2() {
 3 DCFZ, 7 NZVS, 5 HKGWZ, 10 PSHF => 8 KHKGT
 ";
 
-    assert_eq!(13312, stage1(wrap_into_bufreader(input)));
+    assert_eq!(13312, stage1(&Context::parse(wrap_into_bufreader(input))));
 }
 
 #[test]
@@ -359,7 +373,7 @@ fn stage1_example3() {
 176 ORE => 6 VJHF
 ";
 
-    assert_eq!(180697, stage1(wrap_into_bufreader(input)));
+    assert_eq!(180697, stage1(&Context::parse(wrap_into_bufreader(input))));
 }
 
 #[test]
@@ -391,7 +405,7 @@ fn stage1_example4() {
     for _ in 0..100 {
         lines.shuffle(&mut rng);
 
-        assert_eq!(2210736, stage1(lines.as_slice()));
+        assert_eq!(2210736, stage1(&Context::parse(lines.as_slice())));
     }
 }
 
@@ -412,10 +426,16 @@ fn stage1_does_not_show_the_issue() {
 
     let lines = input.lines().map(String::from).collect::<Vec<_>>();
     // not sure of this 19
-    assert_eq!(19, stage1(lines.as_slice()));
+    assert_eq!(19, stage1(&Context::parse(lines.as_slice())));
 }
 
 #[cfg(test)]
 fn wrap_into_bufreader(s: &[u8]) -> BufReadWrapper<std::io::BufReader<std::io::Cursor<&[u8]>>> {
     BufReadWrapper(std::io::BufReader::new(std::io::Cursor::new(s)))
+}
+
+#[test]
+fn full_stage1() {
+    let ctx = Context::parse(BufReadWrapper(std::io::BufReader::new(std::fs::File::open("input").unwrap())));
+    assert_eq!(stage1(&ctx), 1967319);
 }
