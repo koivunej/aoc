@@ -72,6 +72,7 @@ fn stage1<R: HorribleLineAbstraction>(br: R) -> usize {
 
         if name == "FUEL" {
             used.resize(used.len().max(product.id + 1), None);
+            leftovers.resize(used.len(), 0);
             used[product.id] = Some(1);
             product.explode(&mut used, &mut leftovers);
         } else {
@@ -81,6 +82,8 @@ fn stage1<R: HorribleLineAbstraction>(br: R) -> usize {
 
     used.resize(interned.len() + 1, None);
     leftovers.resize(interned.len() + 1, 0);
+
+    assert_eq!(used.len(), leftovers.len());
 
     let mut round_productions = Vec::new();
 
@@ -96,7 +99,7 @@ fn stage1<R: HorribleLineAbstraction>(br: R) -> usize {
 
     loop {
         for (k, v) in &interned {
-            println!("{:>6?} {:>4}", used[*v], k);
+            println!("{:>8} {:>8} {:>8}", used[*v].unwrap_or(0), leftovers[*v], k);
         }
 
         let productions = used.iter()
@@ -136,12 +139,6 @@ fn stage1<R: HorribleLineAbstraction>(br: R) -> usize {
             // the next run
             p.explode(&mut used, &mut leftovers);
         }
-
-        /*for c in coefficients.iter_mut() {
-            let before = c.clone();
-            // perhaps this will save up some garbage or waste better than the ceil div
-            // *c = c.take().map(|q| q.ceil());
-        }*/
     }
 
     /*
@@ -178,16 +175,11 @@ impl Production {
             1
         };
 
-        println!("{}: our_need = used({}) * {} = {} and times = {}", self.id, r[self.id].unwrap(), self.amount, our_need, times);
-
         for req in &self.required {
             // FIXME: this will probably still need to be done with those reserved and used?
             let would_reserve = times * req.amount;
 
             let our_need = would_reserve;
-
-            // FIXME: the leftovers are not handled!
-            //println!("delta = {} * {} * {} == {}", our_c, times, req.amount, delta);
 
             println!("{}: processing req({}) {} and {}", self.id, req.id, r.len(), l.len());
 
@@ -246,7 +238,7 @@ fn explode_first() {
     let mut reserved = Vec::new();
 
     used.resize(6, None);
-    reserved.resize(6, 0);
+    reserved.resize(used.len(), 0);
 
     used[0] = Some(1);
 
@@ -275,6 +267,8 @@ fn explode_second() {
 
     let mut used = vec![Some(0), Some(7), None, Some(11), Some(6)];
     let mut reserved = vec![0, 0, 0, 0, 0];
+
+    assert_eq!(used.len(), reserved.len());
 
     p.explode(&mut used, &mut reserved);
 
@@ -318,7 +312,6 @@ fn stage1_example0() {
 }
 
 #[test]
-#[ignore]
 fn stage1_example1() {
     let input = b"\
 9 ORE => 2 A
@@ -334,7 +327,6 @@ fn stage1_example1() {
 }
 
 #[test]
-#[ignore]
 fn stage1_example2() {
     let input = b"\
 157 ORE => 5 NZVS
@@ -352,7 +344,6 @@ fn stage1_example2() {
 }
 
 #[test]
-#[ignore]
 fn stage1_example3() {
     let input = b"\
 2 VPVL, 7 FWMGM, 2 CXFTF, 11 MNCFX => 1 STKFG
@@ -373,7 +364,6 @@ fn stage1_example3() {
 }
 
 #[test]
-#[ignore]
 fn stage1_example4() {
     use rand::seq::SliceRandom;
     let input = "\
@@ -407,7 +397,6 @@ fn stage1_example4() {
 }
 
 #[test]
-#[ignore]
 fn stage1_does_not_show_the_issue() {
     let input = "\
 1 ORE => 3 A
