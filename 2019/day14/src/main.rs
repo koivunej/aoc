@@ -133,16 +133,6 @@ fn ore_for_fuel(ctx: &Context, fuel: usize) -> usize {
             break;
         }
 
-        // make sure to only run the next batch of recipes which already have their dependencies
-        // this causes running in "waves" and prevents the ORE cascading too fast through a short
-        // path.
-        let all_new = round_productions.iter()
-            .all(|p| p.all_are_new(&used));
-
-        if !all_new {
-            round_productions.retain(|p| !p.all_are_new(&used));
-        }
-
         for p in round_productions.drain(..) {
             // explode will set it's own coefficient to zero which will make us filter it out in
             // the next run
@@ -236,16 +226,6 @@ impl Production {
         t[self.id] = r[self.id].unwrap();
         r[self.id] = Some(0);
         l[self.id] = times * self.amount - our_need;
-    }
-
-    fn all_are_new<V>(&self, c: &Vec<Option<V>>) -> bool {
-        for req in &self.required {
-            match c.get(req.id) {
-                Some(Some(_)) => return false,
-                _ => {},
-            }
-        }
-        return true;
     }
 }
 
