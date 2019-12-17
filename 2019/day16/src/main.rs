@@ -57,7 +57,6 @@ fn simplest_example() {
 }
 
 #[test]
-#[ignore]
 fn hundred_phase_examples() {
     let d = &[
         ("80871224585914546619083218645595", "24176176"),
