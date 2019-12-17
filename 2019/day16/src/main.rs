@@ -1,5 +1,16 @@
+use std::io::BufRead;
+use std::fmt;
+
 fn main() {
-    println!("Hello, world!");
+    let stdin = std::io::stdin();
+    let mut locked = stdin.lock();
+
+    let mut buffer = String::new();
+    locked.read_line(&mut buffer).unwrap();
+
+    let bytes = parse_str(buffer.trim());
+
+    println!("stage1: {}", JoinedBytes(&fft(bytes, 100)[..8]));
 }
 
 fn fft<T: AsRef<[u8]>>(input: T, phases: usize) -> Vec<u8> {
@@ -14,14 +25,11 @@ fn fft<T: AsRef<[u8]>>(input: T, phases: usize) -> Vec<u8> {
                 .flat_map(|v| std::iter::repeat(v).take(i + 1))
                 .skip(1)
                 .zip(a.iter().map(|v| *v as i16))
-                .inspect(|(b, v)| print!("{:>2} * {:>2} = {:>3} ", v, b, *v * *b))
                 .map(|(b, v)| v * b)
                 .sum::<i16>();
 
             b[i] = (s.abs() % 10) as u8;
-            println!(" ===> {}", b[i]);
         }
-        println!("--");
         std::mem::swap(&mut a, &mut b);
     }
 
@@ -72,10 +80,26 @@ fn hundred_phase_examples() {
 #[cfg(test)]
 fn fft_example(input: &str, expected: &str, phases: usize) {
 
-    let i = input.chars().map(|ch| ch as u8 - b'0').map(|b| b as u8).collect::<Vec<_>>();
-    let e = expected.chars().map(|ch| ch as u8 - b'0').map(|b| b as u8).collect::<Vec<_>>();
+    let i = parse_str(input);
+    let e = parse_str(expected);
 
     let output = fft(i.as_slice(), phases);
 
     assert_eq!(&output[..8], e.as_slice());
+}
+
+fn parse_str(input: &str) -> Vec<u8> {
+    input.chars().map(|ch| ch as u8 - b'0').map(|b| b as u8).collect::<Vec<_>>()
+}
+
+struct JoinedBytes<'a>(&'a [u8]);
+
+impl<'a> fmt::Display for JoinedBytes<'a> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        for b in self.0 {
+            write!(fmt, "{}", b)?;
+        }
+
+        Ok(())
+    }
 }
