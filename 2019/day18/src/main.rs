@@ -2,18 +2,22 @@ use intcode::{util::GameDisplay, Word};
 use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
+use std::collections::HashMap;
 
 fn main() {
     println!("Hello, world!");
 }
 
 fn steps_to_collect_all_keys(m: &Map) -> usize {
+    let mut last_key: Option<char> = None;
+    let mut last_door: Option<char> = None;
+
     unimplemented!()
 }
 
 struct Map {
     gd: GameDisplay<Tile>,
-    portal_at: (Word, Word),
+    poi: HashMap<Tile, (Word, Word)>,
 }
 
 impl fmt::Display for Map {
@@ -22,7 +26,7 @@ impl fmt::Display for Map {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 enum Tile {
     Empty,
     Wall,
@@ -73,7 +77,8 @@ impl FromStr for Map {
     type Err = InvalidTile;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (gd, portal_at) = s
+        use std::collections::hash_map::Entry;
+        let (gd, poi) = s
             .trim()
             .chars()
             .scan((0i64, 0i64), |mut acc, ch| match ch {
@@ -93,24 +98,29 @@ impl FromStr for Map {
                 None => None,
             })
             .map(|(pos, ch)| (pos, Tile::try_from(ch)))
-            .fold(Ok((GameDisplay::default(), None)), |gd, (pos, tile)| {
-                let (mut gd, mut portal_at) = gd.unwrap();
+            .fold(Ok((GameDisplay::default(), HashMap::new())), |gd, (pos, tile)| {
+                let (mut gd, mut poi) = gd.unwrap();
                 let tile = tile?;
-                portal_at = match (&tile, portal_at) {
-                    (&Tile::Portal, None) => Some(pos),
-                    (&Tile::Portal, Some(old)) => {
-                        panic!("too many portals found: {:?} and {:?}", old, pos)
-                    }
-                    (_, x @ _) => x,
-                };
+
+                match &tile {
+                    &Tile::Portal
+                    | &Tile::Door(_)
+                    | &Tile::Key(_) => {
+                        let old = poi.insert(tile.clone(), pos.clone());
+                        if let Some(x) = old {
+                            panic!("duplicate coordinates for tile {:?}: {:?} and {:?}", tile, pos, x);
+                        }
+                    },
+                    _ => {}
+                }
 
                 gd.insert(&pos, tile);
-                Ok((gd, portal_at))
+                Ok((gd, poi))
             })?;
 
         Ok(Map {
             gd,
-            portal_at: portal_at.expect("There must be a portal somewhere in the map"),
+            poi,
         })
     }
 }
@@ -125,7 +135,10 @@ fn parse_first_map() {
     let m = Map::from_str(s).unwrap();
 
     assert_eq!(s.trim(), format!("{}", m).trim());
-    assert_eq!((5, 1), m.portal_at);
+    assert_eq!(Some(&(5, 1)), m.poi.get(&Tile::Portal));
+    assert_eq!(Some(&(7, 1)), m.poi.get(&Tile::Key('a')));
+    assert_eq!(Some(&(3, 1)), m.poi.get(&Tile::Door('A')));
+    assert_eq!(Some(&(1, 1)), m.poi.get(&Tile::Key('b')));
 
     assert_eq!(&Tile::Wall, m.gd.get(&(0, 0)).unwrap());
 }
