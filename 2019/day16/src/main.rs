@@ -10,25 +10,29 @@ fn main() {
 
     let bytes = parse_str(buffer.trim());
 
-    println!("stage1: {}", JoinedBytes(&fft(bytes, 100)[..8]));
+    println!("stage1: {}", JoinedBytes(&naive_fft(bytes.iter().cloned(), 100)[..8]));
+    println!("stage2: {}", JoinedBytes(&repeated_fft(&buffer, &bytes)));
 }
 
-fn fft<T: AsRef<[u8]>>(input: T, phases: usize) -> Vec<u8> {
-    let base = &[0i16, 1, 0, -1];
+fn naive_fft<I: Iterator<Item = u8>>(input: I, phases: usize) -> Vec<u8> {
+    // nope, rayon does not make this go faster
+    let base = &[0i8, 1, 0, -1];
 
-    let mut a = input.as_ref().to_vec();
+    let mut a = input.collect::<Vec<_>>();
     let mut b = a.clone();
 
     for _ in 0..phases {
-        for i in 0..input.as_ref().len() {
-            let s = BasePattern(base, 0)
-                .flat_map(|v| std::iter::repeat(v).take(i + 1))
+        for (i, x) in b.iter_mut().enumerate() {
+            let sum = base.iter()
+                .copied()
+                .flat_map(|b| std::iter::repeat(b).take(i + 1))
+                .cycle()
                 .skip(1)
-                .zip(a.iter().map(|v| *v as i16))
-                .map(|(b, v)| v * b)
-                .sum::<i16>();
+                .zip(a.iter().map(|v| *v as i32))
+                .map(|(b, v)| (b as i32 * v))
+                .sum::<i32>();
 
-            b[i] = (s.abs() % 10) as u8;
+            *x = (sum.abs() % 10) as u8;
         }
         std::mem::swap(&mut a, &mut b);
     }
@@ -36,31 +40,47 @@ fn fft<T: AsRef<[u8]>>(input: T, phases: usize) -> Vec<u8> {
     a
 }
 
-struct BasePattern<'a>(&'a [i16], usize);
+fn repeated_fft(buffer: &str, bytes: &[u8]) -> Vec<u8> {
+    let len = bytes.len();
+    let offset = buffer[..7].parse::<usize>().unwrap();
+    let mut repeated = bytes.iter()
+        .cycle()
+        .copied()
+        .take(10_000 * len)
+        .skip(offset)
+        .collect::<Vec<_>>();
 
-impl<'a> Iterator for BasePattern<'a> {
-    type Item = i16;
+    // after halfpoint all of the coefficients become done. before half point everything is zero.
+    assert!(offset >= 10_000 * len / 2);
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let ret = self.0[self.1];
-        self.1 = (self.1 + 1) % self.0.len();
-        Some(ret)
+    for _ in 0..100 {
+        // "prefix sum" or suffix sum
+        let mut tmp = 0u32;
+        repeated.iter_mut().rev().for_each(|v| {
+            // prefix/suffix sum which should had been seen from the examples in order to avoid the
+            // O(n²). thank you 0e4ef622 for explaning this to me :)
+            tmp += *v as u32;
+            *v = (tmp % 10) as u8;
+        });
     }
+
+    repeated.truncate(8);
+    repeated
 }
 
 #[test]
 fn simplest_example() {
     let input = &[1,2,3,4,5,6,7,8];
-    let input = fft(input, 1);
+    let input = naive_fft(input.iter().copied(), 1);
     assert_eq!(input, &[4,8,2,2,6,1,5,8]);
 
-    let input = fft(input, 1);
+    let input = naive_fft(input.iter().copied(), 1);
     assert_eq!(input, &[3,4,0,4,0,4,3,8]);
 
-    let input = fft(input, 1);
+    let input = naive_fft(input.iter().copied(), 1);
     assert_eq!(input, &[0,3,4,1,5,5,1,8]);
 
-    let input = fft(input, 1);
+    let input = naive_fft(input.iter().copied(), 1);
     assert_eq!(input, &[0,1,0,2,9,4,9,8]);
 }
 
@@ -73,17 +93,33 @@ fn hundred_phase_examples() {
     ];
 
     for (input, expected) in d {
-        fft_example(input, expected, 100);
+        naive_fft_example(input, expected, 100);
+    }
+}
+
+#[test]
+fn stage2_examples() {
+    let d = &[
+        ("03036732577212944063491565474664", "84462026"),
+        ("02935109699940807407585447034323", "78725270"),
+        ("03081770884921959731165446850517", "53553731"),
+    ];
+
+    for (input, expected) in d {
+        let i = parse_str(input);
+        let expected = parse_str(expected);
+        let actual = repeated_fft(input, &i);
+        assert_eq!(actual, expected);
     }
 }
 
 #[cfg(test)]
-fn fft_example(input: &str, expected: &str, phases: usize) {
+fn naive_fft_example(input: &str, expected: &str, phases: usize) {
 
     let i = parse_str(input);
     let e = parse_str(expected);
 
-    let output = fft(i.as_slice(), phases);
+    let output = naive_fft(i.iter().copied(), phases);
 
     assert_eq!(&output[..8], e.as_slice());
 }

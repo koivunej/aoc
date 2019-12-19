@@ -33,3 +33,7 @@ Day11: Further `intcode` memory abstraction with custom `Cow` type. Can't rememb
 Day12: `num` crate, threading, SoA, maybe SIMD enabled computation?
 
 Day13: Peak complexity "game display" (adaptive 2d board)
+
+Day14: Lot of simple mistakes which took a huge amount to fix
+
+Day16: Now I know prefix sum
