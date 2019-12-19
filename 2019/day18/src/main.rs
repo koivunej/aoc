@@ -2,22 +2,381 @@ use intcode::{util::GameDisplay, Word};
 use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
+use ndarray::{s, Array2};
+use itertools::Either;
 
 fn main() {
     println!("Hello, world!");
 }
 
-fn steps_to_collect_all_keys(m: &Map) -> usize {
-    let mut last_key: Option<char> = None;
-    let mut last_door: Option<char> = None;
+fn steps_to_collect_all_keys(m: &mut Map) -> usize {
 
-    unimplemented!()
+    // for each key, create key => (Path, Vec<KeyRequirement>)
+    //
+    // for larger example that would be:
+    //
+    // ########################
+    // #f.D.E.e.C.b.A.@.a.B.c.#
+    // ######################.#
+    // #d.....................#
+    // ########################
+    //
+    // 'a' => ( 2, [])
+    // 'b' => ( 4, ['a'])
+    // 'c' => ( 6, ['b'])
+    // 'd' => (72, ['b'])
+    // 'e' => ( 8, ['a', 'c'])
+    // 'f' => (14, ['d', 'e', 'c'])
+    //
+    // gives us "when we have $keyset we can get $next_key":
+    // none => a => b =>
+    //                => c => e
+    //                => d      => f
+    //
+    // should collect subpaths from keys to door-requirements?
+    // maybe even color those in a map with some "key color"?
+    //
+    // for example f -> D = [(2, 1), (3, 1)].len() == 2
+    //             f -> E = 2 + 2 == 4
+    //
+    // lock initial position as a starting point for exploration?
+    // explore until first requirement?
+    // recheck if we can make progress after each picked up key? ... need to be able to backtrack!
+    //
+    // find all unobstructed paths between keys?
+    // a has none
+    // b has none
+    // c <-> d
+    //
+    // nope does not work, perhaps all paths and key requirements?
+
+    let vertices = m.gd.cells().iter()
+        .enumerate()
+        .filter_map(|(i, t)| match t {
+            Tile::Wall => None,
+            t => Some((m.gd.to_coordinates(i), t.clone())),
+        })
+        .collect::<Vec<_>>();
+
+    let vertices_index = vertices.iter()
+        .enumerate()
+        .map(|(i, (coords, tile))| (coords, i))
+        .collect::<HashMap<_, _>>();
+
+    let edges = vertices.iter()
+        .flat_map(|(c, t)| m.frontier_where(*c, t).map(move |(target, _tile)| (*c, target)))
+        .map(|(from, to)| (vertices_index[&from], vertices_index[&to]));
+
+    let mut dist = ndarray::Array2::<Option<u32>>::from_elem((vertices.len(), vertices.len()), None);
+    let mut next = ndarray::Array2::<Option<usize>>::from_elem((vertices.len(), vertices.len()), None);
+
+    //let edges = vertices.iter().enumerate().flat_map(|(i, (pos, _))| m.frontier(&pos).map(move |(next, _)| (pos, next, 1)));
+
+    for (from, to) in edges {
+        dist[(from, to)] = Some(1);
+        dist[(to, from)] = Some(1);
+        next[(from, to)] = Some(to);
+        next[(to, from)] = Some(from);
+    }
+
+    for (i, _) in vertices.iter().enumerate() {
+        assert_eq!(dist[(i, i)], None);
+        next[(i, i)] = Some(i);
+        //dist[(i, i)] = 0;
+    }
+
+    for k in 0..vertices.len() {
+        for i in 0..vertices.len() {
+            for j in 0..vertices.len() {
+
+                if i == j || i == k || k == j {
+                    continue;
+                }
+
+                let rhs = dist[(i, k)]
+                    .and_then(|ik| dist[(k, j)]
+                    .map(|kj| ik + kj));
+
+                if rhs.is_none() {
+                    continue;
+                }
+
+                let lhs = &mut dist[(i, j)];
+
+                if rhs.is_some() && (lhs.is_none() || lhs.unwrap() > rhs.unwrap()) {
+                    let rhs = rhs.unwrap();
+                    if lhs.unwrap_or(u32::max_value()) > rhs {
+                        *lhs = Some(rhs);
+                        next[(i, j)] = next[(i, k)];
+                    }
+                }
+            }
+        }
+    }
+
+    let all_paths = AllPaths {
+        dist: &dist,
+        next: &next,
+        vertices: vertices.as_slice(),
+        index: &vertices_index
+    };
+
+    let mut pos = m.initial_position;
+    let mut keys = KeySet::default();
+    let mut steps = 0;
+
+    let mut all_keys = m.poi.iter().filter(|(t, _)| if let &Tile::Key(_) = t { true } else { false }).collect::<Vec<_>>();
+    let mut choices = Vec::new();
+
+    while !all_keys.is_empty() {
+
+        //let chosen_index = None;
+
+        choices.clear();
+        choices.extend(
+            all_keys.iter()
+                .enumerate()
+                .map(|(i, (tile, coord))| (i, *tile, all_paths.find_path(coord, &pos, None, &keys)))
+                .filter_map(|(i, t, p)| p.map(|(path, _)| (i, path.len() - 1, *path.first().unwrap(), t)))
+        );
+
+        if choices.len() == 1 {
+            let (i, more_steps, end_up_at, tile) = choices.pop().unwrap();
+            all_keys.swap_remove(i);
+
+            pos = end_up_at;
+            keys += tile;
+            steps += more_steps;
+            continue;
+        }
+
+        unimplemented!("unexpect amount of choices: {:?}", choices);
+    }
+
+    steps
 }
+
+struct InterestingPath {
+    steps: usize,
+    end_up_at: (i64, i64),
+    requirements: KeySet,
+    provides: KeySet,
+}
+
+impl From<(Vec<(Word, Word)>, KeySet)> for InterestingPath {
+    fn from((path, reqs_and_provided): (Vec<(Word, Word)>, KeySet)) -> Self {
+        InterestingPath {
+            steps: path.len(),
+            end_up_at: *path.last().unwrap(),
+            requirements: reqs_and_provided.only_doors(),
+            provides: reqs_and_provided.only_keys(),
+        }
+    }
+}
+
+struct AllPaths<'a, 'b> {
+    dist: &'a Array2<Option<u32>>,
+    next: &'a Array2<Option<usize>>,
+    vertices: &'a [((Word, Word), Tile)],
+    index: &'a HashMap<&'b (Word, Word), usize>,
+}
+
+impl<'a, 'b> AllPaths<'a, 'b> {
+    fn find_path(&self, a: &(Word, Word), b: &(Word, Word), max_len: Option<usize>, keys: &KeySet) -> Option<(Vec<(Word, Word)>, KeySet)> {
+        let u = self.index[a];
+        let v = self.index[b];
+
+        assert_ne!(max_len, Some(0));
+
+        let mut path_keys = KeySet::default();
+        path_keys += &self.vertices[u].1;
+        let mut path = vec![self.vertices[u].0];
+
+        let mut u = match self.next[(u, v)] {
+            Some(u) => u,
+            None => {
+                return None;
+            }
+        };
+
+        path_keys += &self.vertices[u].1;
+        path.push(self.vertices[u].0);
+
+        loop {
+            match (path.len(), max_len) {
+                (x, Some(y)) if x >= y => {
+                    return None;
+                },
+                _ => {},
+            }
+
+            u = match self.next[(u, v)] {
+                Some(u) => u,
+                None => {
+                    panic!("no subpath from {:?} to {:?}", self.vertices[u], self.vertices[v]);
+                }
+            };
+            path_keys += &self.vertices[u].1;
+            if !keys.can_open(&path_keys) {
+                return None;
+            }
+            path.push(self.vertices[u].0);
+
+            if u == v {
+                break;
+            }
+        }
+
+        Some((path, path_keys))
+    }
+}
+
+#[derive(Default, Clone, Copy)]
+struct KeySet(u64);
+
+impl std::ops::Add<&Tile> for KeySet {
+    type Output = KeySet;
+
+    fn add(self, key: &Tile) -> KeySet {
+        let bit = Self::to_bit(key).unwrap_or_else(|nk| panic!("add given non-key: {}", nk));
+
+        if self.0 & bit == 0 {
+            KeySet(self.0 | bit)
+        } else {
+            panic!("Key already in keyset: {:?}", key)
+        }
+    }
+}
+
+impl std::ops::AddAssign<&Tile> for KeySet {
+    fn add_assign(&mut self, rhs: &Tile) {
+        let bit = match Self::to_bit(rhs) {
+            Ok(bit) => bit,
+            Err(_) => return,
+        };
+
+        if self.0 & bit == 0 {
+            self.0 |= bit;
+        } else {
+            panic!("Key already in keyset: {:?}", rhs);
+        }
+    }
+}
+
+impl std::ops::Sub<&KeySet> for KeySet {
+    type Output = KeySet;
+
+    fn sub(self, rhs: &KeySet) -> KeySet {
+        KeySet(self.0 & !rhs.0)
+    }
+}
+
+impl KeySet {
+    fn to_bit(key: &Tile) -> Result<u64, &Tile> {
+        match key {
+            &Tile::Key(ch) => Ok(1 << (ch as u8 - b'a')),
+            &Tile::Door(ch) => Ok(1 << ch as u8 - b'A' + b'z' - b'a' + 1),
+            x => Err(x),
+        }
+    }
+
+    fn can_open(&self, doors: &KeySet) -> bool {
+        let only_keys = self.only_keys().0;
+        let only_doors = doors.only_doors().0;
+
+        only_keys == only_doors || only_keys & (only_doors >> 26) != 0
+    }
+
+    fn contains(&self, key: &Tile) -> bool {
+        match Self::to_bit(key) {
+            Ok(bit) => self.0 & bit == 0,
+            Err(e) => panic!("contains given non-key: {}", e),
+        }
+    }
+
+    fn key_count(&self) -> usize {
+        let keys = 0xff_ffff;
+        (self.0 & keys).count_ones() as usize
+    }
+
+    fn only_keys(&self) -> Self {
+        let keys = 0xff_ffff;
+        KeySet(self.0 & keys)
+    }
+
+    fn only_doors(&self) -> Self {
+        let doors = !0x0000_0000_00ff_ffff;
+        KeySet(self.0 & doors)
+    }
+}
+
+impl fmt::Debug for KeySet {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        if self.0 == 0 {
+            return write!(fmt, "0");
+        }
+
+        write!(fmt, "\"")?;
+
+        for ch in b'a'..=b'z' {
+            let bit = 1 << (ch - b'a');
+
+            if self.0 & bit != 0 {
+                write!(fmt, "{}", ch as char)?;
+            }
+        }
+        for ch in b'A'..=b'Z' {
+            let bit = 1 << (ch - b'A' + b'z' - b'a' + 1);
+            if self.0 & bit != 0 {
+                write!(fmt, "{}", ch as char)?;
+            }
+        }
+
+        write!(fmt, "\"")
+    }
+}
+
+/// We can explain our travers with this?
+struct Waypoint((Word, Word), Tile);
 
 struct Map {
     gd: GameDisplay<Tile>,
     poi: HashMap<Tile, (Word, Word)>,
+    initial_position: (Word, Word),
+}
+
+impl Map {
+    fn frontier<'a>(&'a self, pos: (Word, Word)) -> impl Iterator<Item = ((Word, Word), Tile)> + 'a {
+        match self.gd.get(&pos) {
+            Some(&Tile::Wall) | None => Either::Left(std::iter::empty()),
+            Some(t) => Either::Right(self.frontier_where(pos, t))
+        }
+    }
+
+    fn frontier_where<'a>(&'a self, pos: (Word, Word), t: &'a Tile) -> impl Iterator<Item = ((Word, Word), Tile)> + 'a {
+        let deltas = &[
+            ( 0, -1), // up
+            ( 1,  0), // right
+            ( 0,  1), // down
+            (-1,  0) // left
+        ];
+
+        match t {
+            &Tile::Wall => return Either::Left(std::iter::empty()),
+            _ => {}
+        }
+
+        Either::Right(deltas.iter()
+            .map(move |d| (pos.0 + d.0, pos.1 + d.1))
+            .filter_map(move |p| {
+                self.gd.get(&p).and_then(|t| match t {
+                    &Tile::Wall => None,
+                    _ => Some((p, t.clone()))
+                })
+            }))
+    }
+
 }
 
 impl fmt::Display for Map {
@@ -33,6 +392,15 @@ enum Tile {
     Portal,
     Key(char),
     Door(char),
+}
+
+impl Tile {
+    fn is_key(&self) -> bool {
+        match *self {
+            Tile::Key(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for Tile {
@@ -78,7 +446,7 @@ impl FromStr for Map {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use std::collections::hash_map::Entry;
-        let (gd, poi) = s
+        let (mut gd, mut poi) = s
             .trim()
             .chars()
             .scan((0i64, 0i64), |mut acc, ch| match ch {
@@ -118,9 +486,13 @@ impl FromStr for Map {
                 Ok((gd, poi))
             })?;
 
+        let initial_position = poi.remove(&Tile::Portal).expect("No portal '@' found on the map");
+        gd.insert(&initial_position, Tile::Empty);
+
         Ok(Map {
             gd,
             poi,
+            initial_position,
         })
     }
 }
@@ -134,8 +506,8 @@ fn parse_first_map() {
 
     let m = Map::from_str(s).unwrap();
 
-    assert_eq!(s.trim(), format!("{}", m).trim());
-    assert_eq!(Some(&(5, 1)), m.poi.get(&Tile::Portal));
+    assert_eq!(s.trim().replace("@", "."), format!("{}", m).trim());
+    assert_eq!((5, 1), m.initial_position);
     assert_eq!(Some(&(7, 1)), m.poi.get(&Tile::Key('a')));
     assert_eq!(Some(&(3, 1)), m.poi.get(&Tile::Door('A')));
     assert_eq!(Some(&(1, 1)), m.poi.get(&Tile::Key('b')));
@@ -150,7 +522,8 @@ fn full_first_example() {
 #b.A.@.a#
 #########";
 
-    let m = Map::from_str(s).unwrap();
+    let mut m = Map::from_str(s).unwrap();
 
-    assert_eq!(steps_to_collect_all_keys(&m), 8);
+    assert_eq!(steps_to_collect_all_keys(&mut m), 8);
 }
+

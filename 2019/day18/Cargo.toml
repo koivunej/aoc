@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 intcode = { path = "../intcode" }
+ndarray = "0.13"
+itertools = "*"
