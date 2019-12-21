@@ -122,7 +122,7 @@ mod gamedisplay {
     }
 
     impl<T> GameDisplay<T> {
-        fn to_index(&self, p: &(Word, Word)) -> Option<usize> {
+        pub fn to_index(&self, p: &(Word, Word)) -> Option<usize> {
             let (x, y) = *p;
             let w = self.width as Word;
             let h = self.height as Word;
@@ -156,6 +156,21 @@ mod gamedisplay {
         pub fn get(&self, p: &(Word, Word)) -> Option<&T> {
             self.to_index(p)
                 .and_then(|index| self.cells.get(index))
+        }
+
+        pub fn cells(&self) -> &[T] {
+            self.cells.as_slice()
+        }
+
+        pub fn to_coordinates(&self, index: usize) -> (Word, Word) {
+            let x = index % self.width;
+            let y = index / self.width;
+            assert!(y < self.width);
+            (x as Word, y as Word)
+        }
+
+        pub fn len(&self) -> usize {
+            self.cells.len()
         }
     }
 

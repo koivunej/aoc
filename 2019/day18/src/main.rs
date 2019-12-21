@@ -12,45 +12,6 @@ fn main() {
 
 fn steps_to_collect_all_keys(m: &mut Map) -> usize {
 
-    // for each key, create key => (Path, Vec<KeyRequirement>)
-    //
-    // for larger example that would be:
-    //
-    // ########################
-    // #f.D.E.e.C.b.A.@.a.B.c.#
-    // ######################.#
-    // #d.....................#
-    // ########################
-    //
-    // 'a' => ( 2, [])
-    // 'b' => ( 4, ['a'])
-    // 'c' => ( 6, ['b'])
-    // 'd' => (72, ['b'])
-    // 'e' => ( 8, ['a', 'c'])
-    // 'f' => (14, ['d', 'e', 'c'])
-    //
-    // gives us "when we have $keyset we can get $next_key":
-    // none => a => b =>
-    //                => c => e
-    //                => d      => f
-    //
-    // should collect subpaths from keys to door-requirements?
-    // maybe even color those in a map with some "key color"?
-    //
-    // for example f -> D = [(2, 1), (3, 1)].len() == 2
-    //             f -> E = 2 + 2 == 4
-    //
-    // lock initial position as a starting point for exploration?
-    // explore until first requirement?
-    // recheck if we can make progress after each picked up key? ... need to be able to backtrack!
-    //
-    // find all unobstructed paths between keys?
-    // a has none
-    // b has none
-    // c <-> d
-    //
-    // nope does not work, perhaps all paths and key requirements?
-
     let vertices = m.gd.cells().iter()
         .enumerate()
         .filter_map(|(i, t)| match t {
@@ -138,20 +99,44 @@ fn steps_to_collect_all_keys(m: &mut Map) -> usize {
             all_keys.iter()
                 .enumerate()
                 .map(|(i, (tile, coord))| (i, *tile, all_paths.find_path(coord, &pos, None, &keys)))
-                .filter_map(|(i, t, p)| p.map(|(path, _)| (i, path.len() - 1, *path.first().unwrap(), t)))
+                .filter_map(|(i, t, p)| p.map(|(path, keys)| (i, path.len() - 1, *path.first().unwrap(), t, keys)))
         );
 
-        if choices.len() == 1 {
-            let (i, more_steps, end_up_at, tile) = choices.pop().unwrap();
+        while choices.len() > 1 {
+
+            choices.sort_by_key(|(_, more_steps, _, _, _)| *more_steps);
+
+            let mut purge = Vec::new();
+
+            for (i, x) in choices.iter().enumerate().rev() {
+                purge.extend(choices.iter().enumerate().rev().skip(i).filter_map(|(j, y)| if y.4.subset_of(&x.4) && i != j { Some(j) } else { None }));
+            }
+
+            for x in purge {
+                choices.swap_remove(x);
+            }
+
+            /*if choices.len() > 1 {
+                unimplemented!("unexpect amount of choices with keys={:?}, steps={}, remaining={:?}: {:?}\n{}", keys, steps, all_keys, choices, m);
+            }*/
+            break;
+            // would need to take a look if any of the paths is a subpath of another... not sure if
+            // that is easy... perhaps through keys?
+        }
+
+        //if choices.len() == 1 {
+            let (i, more_steps, end_up_at, tile, _) = choices.pop().unwrap();
             all_keys.swap_remove(i);
 
+            let old_pos = pos;
             pos = end_up_at;
             keys += tile;
             steps += more_steps;
+            println!("moved to {:?}...{:?} at {:?} total {} steps", old_pos, pos, tile, steps);
             continue;
-        }
+        //}
 
-        unimplemented!("unexpect amount of choices: {:?}", choices);
+        unimplemented!("unexpect amount of choices with keys={:?}, steps={}, remaining={:?}: {:?}\n{}", keys, steps, all_keys, choices, m);
     }
 
     steps
@@ -160,17 +145,15 @@ fn steps_to_collect_all_keys(m: &mut Map) -> usize {
 struct InterestingPath {
     steps: usize,
     end_up_at: (i64, i64),
-    requirements: KeySet,
-    provides: KeySet,
+    req_prov: KeySet,
 }
 
 impl From<(Vec<(Word, Word)>, KeySet)> for InterestingPath {
-    fn from((path, reqs_and_provided): (Vec<(Word, Word)>, KeySet)) -> Self {
+    fn from((path, req_prov): (Vec<(Word, Word)>, KeySet)) -> Self {
         InterestingPath {
             steps: path.len(),
             end_up_at: *path.last().unwrap(),
-            requirements: reqs_and_provided.only_doors(),
-            provides: reqs_and_provided.only_keys(),
+            req_prov
         }
     }
 }
@@ -232,7 +215,7 @@ impl<'a, 'b> AllPaths<'a, 'b> {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Hash, PartialEq, Eq)]
 struct KeySet(u64);
 
 impl std::ops::Add<&Tile> for KeySet {
@@ -285,7 +268,9 @@ impl KeySet {
         let only_keys = self.only_keys().0;
         let only_doors = doors.only_doors().0;
 
-        only_keys == only_doors || only_keys & (only_doors >> 26) != 0
+        let shifted = only_doors >> 26;
+        // println!("init({:?}, {:?}): only({:08x} and {:08x})", self, doors, only_keys, only_doors >> 26);
+        only_keys & shifted == shifted
     }
 
     fn contains(&self, key: &Tile) -> bool {
@@ -293,6 +278,10 @@ impl KeySet {
             Ok(bit) => self.0 & bit == 0,
             Err(e) => panic!("contains given non-key: {}", e),
         }
+    }
+
+    fn subset_of(&self, rhs: &KeySet) -> bool {
+        (self.0 & rhs.0) == self.0
     }
 
     fn key_count(&self) -> usize {
@@ -309,6 +298,24 @@ impl KeySet {
         let doors = !0x0000_0000_00ff_ffff;
         KeySet(self.0 & doors)
     }
+}
+
+#[test]
+fn keyset_opening() {
+    let mut ks = KeySet::default();
+
+    ks += &Tile::Key('a');
+
+    let ks = ks;
+
+    let doors = KeySet::default() + &Tile::Door('A');
+
+    assert!(!KeySet::default().can_open(&doors));
+    assert!(ks.can_open(&doors));
+
+    assert!(ks.subset_of(&(ks + &Tile::Door('A'))));
+    assert!(ks.subset_of(&(ks + &Tile::Key('b'))));
+    assert!(!ks.subset_of(&(KeySet::default() + &Tile::Key('b'))));
 }
 
 impl fmt::Debug for KeySet {
@@ -527,3 +534,30 @@ fn full_first_example() {
     assert_eq!(steps_to_collect_all_keys(&mut m), 8);
 }
 
+#[test]
+fn first_multiple_choice() {
+    let s = "\
+########################
+#f.D.E.e.C.b.A.@.a.B.c.#
+######################.#
+#d.....................#
+########################";
+
+    let mut m = Map::from_str(s).unwrap();
+
+    assert_eq!(steps_to_collect_all_keys(&mut m), 86);
+}
+
+#[test]
+fn second_multiple_choice() {
+    let s = "\
+########################
+#...............b.C.D.f#
+#.######################
+#.....@.a.B.c.d.A.e.F.g#
+########################";
+
+    let mut m = Map::from_str(s).unwrap();
+
+    assert_eq!(steps_to_collect_all_keys(&mut m), 132);
+}
