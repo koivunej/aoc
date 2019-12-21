@@ -93,15 +93,14 @@ fn steps_to_collect_all_keys(m: &mut Map) -> usize {
 
     while !all_keys.is_empty() {
 
-        //let chosen_index = None;
-
         choices.clear();
-        choices.extend(
-            all_keys.iter()
+
+        let next_possible = all_keys.iter()
                 .enumerate()
                 .map(|(i, (tile, coord))| (i, *tile, all_paths.find_path(coord, &pos, &keys)))
-                .filter_map(|(i, t, p)| p.map(|(path, keys)| (i, path.len() - 1, *path.first().unwrap(), t, keys)))
-        );
+                .filter_map(|(i, t, p)| p.map(|(path, keys)| (i, path.len() - 1, *path.first().unwrap(), t, keys)));
+
+        choices.extend(next_possible);
 
         while choices.len() > 1 {
 
