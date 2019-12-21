@@ -4,6 +4,8 @@ use std::fmt;
 use std::str::FromStr;
 use std::collections::{HashMap, HashSet, BinaryHeap};
 use std::io::Read;
+use std::time::Instant;
+use std::cmp;
 use ndarray::Array2;
 use itertools::Either;
 
@@ -40,27 +42,41 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
         .flat_map(|(c, t)| m.frontier_where(*c, t).map(move |(target, _tile)| (*c, target)))
         .map(|(from, to)| (vertices_index[&from], vertices_index[&to]));
 
-    let mut dist = ndarray::Array2::<Option<u32>>::from_elem((vertices.len(), vertices.len()), None);
-    let mut next = ndarray::Array2::<Option<usize>>::from_elem((vertices.len(), vertices.len()), None);
+    let mut dist = Array2::<Option<u32>>::from_elem((vertices.len(), vertices.len()), None);
+    let mut next = Array2::<Option<usize>>::from_elem((vertices.len(), vertices.len()), None);
+    //let mut key_req = Array2::<KeySet>::from_elem((vertices.len(), vertices.len()), KeySet::default());
 
     let mut edge_count = 0;
+
+    for (i, _) in vertices.iter().enumerate() {
+        next[(i, i)] = Some(i);
+        //key_req[(i, i)] += &vertices[i].1;
+    }
+
     for (from, to) in edges {
         dist[(from, to)] = Some(1);
         dist[(to, from)] = Some(1);
         next[(from, to)] = Some(to);
         next[(to, from)] = Some(from);
 
-        edge_count += 2;
-    }
+        //let sum = &key_req[(from, from)] + &key_req[(to, to)];
+        //key_req[(to, from)] = sum;
+        //key_req[(from, to)] = sum;
 
-    for (i, _) in vertices.iter().enumerate() {
-        next[(i, i)] = Some(i);
+        edge_count += 2;
     }
 
     println!("calculating paths for {} vertices and {} edges", vertices.len(), edge_count);
 
+    let started_at = Instant::now();
+    let mut last_progress_at = started_at;
     for k in 0..vertices.len() {
-        println!("calculated {}/{}", k * vertices.len().pow(2), vertices.len().pow(3));
+        if (Instant::now() - last_progress_at).as_secs() >= 5 {
+            let visited = k * vertices.len().pow(2);
+            let total = vertices.len().pow(3);
+            println!("paths {:3.2}%", (100.0 * visited as f32) / total as f32);
+            last_progress_at = Instant::now();
+        }
         for i in 0..vertices.len() {
             for j in 0..vertices.len() {
 
@@ -68,33 +84,37 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
                     continue;
                 }
 
-                let rhs = dist[(i, k)]
-                    .and_then(|ik| dist[(k, j)]
-                    .map(|kj| ik + kj));
+                let rhs0 = dist[(i, k)];
 
-                if rhs.is_none() {
+                if rhs0.is_none() {
                     continue;
                 }
+
+                let rhs1 = dist[(k, j)];
+
+                if rhs1.is_none() {
+                    continue;
+                }
+
+                let rhs = rhs0.unwrap() + rhs1.unwrap();
 
                 let lhs = &mut dist[(i, j)];
 
                 // not really sure why this floyd warshall imitation works but it seems to work
 
-                if rhs.is_some() && (lhs.is_none() || lhs.unwrap() > rhs.unwrap()) {
-                    let rhs = rhs.unwrap();
-                    if lhs.unwrap_or(u32::max_value()) > rhs {
-                        *lhs = Some(rhs);
-                        next[(i, j)] = next[(i, k)];
-                    }
+                if lhs.is_none() || lhs.unwrap() > rhs {
+                    *lhs = Some(rhs);
+                    next[(i, j)] = next[(i, k)];
+                    //key_req[(i, j)] = &key_req[(i, k)] + &key_req[(k, j)];
                 }
             }
         }
     }
 
-    println!("got all paths");
+    let paths_completed_at = Instant::now();
+    let paths_elapsed = paths_completed_at - started_at;
 
     let all_paths = AllPaths {
-        dist: &dist,
         next: &next,
         vertices: vertices.as_slice(),
         index: &vertices_index
@@ -102,42 +122,50 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
 
     let all_keys = m.poi.iter().filter(|(t, _)| t.is_key()).collect::<Vec<_>>();
     let all_keys_set = m.poi.iter().filter(|(t, _)| t.is_key()).fold(KeySet::default(), |ks, (t, _)| ks + t);
-    println!("all_keys: {:?}", all_keys);
+    // println!("all_keys: {:?}", all_keys);
 
     // not sure how this could be formulated as a dynamic programming task
     // it is not always obvious which of the keys is a good last key to get.
 
     let mut frontier = BinaryHeap::new();
 
-    frontier.push(cmp::Reverse(InterestingPath {
+    frontier.push(InterestingPath {
         steps: 0,
-        keys: cmp::Reverse(KeySet::default()),
+        keys: KeySet::default(),
         pos: m.initial_position,
-    }));
+    });
 
     let mut visited = HashSet::new();
-
     let mut solutions = BinaryHeap::new();
 
-    while let Some(cmp::Reverse(ip)) = frontier.pop() {
+    let started_at = Instant::now();
+    let mut last_progress_at = Instant::now();
+    let mut pruned = 0;
+
+    // thought about building the key dependency poset but the filter on next_possible below does
+    // that already
+
+    while let Some(ip) = frontier.pop() {
 
         if let Some(cmp::Reverse(min)) = solutions.peek() {
             if *min < ip.steps {
-                println!("pruning {:?} {:?} {} steps", ip.pos, ip.keys.0, ip.steps);
+                pruned += 1;
+                //println!("pruning {:?} {:?} {} steps", ip.pos, ip.keys.0, ip.steps);
                 continue;
             }
         }
 
         if !visited.insert(ip.clone()) {
-            println!("pruning {:?} {:?} {} steps", ip.pos, ip.keys.0, ip.steps);
+            pruned += 1;
+            //println!("pruning {:?} {:?} {} steps", ip.pos, ip.keys.0, ip.steps);
             continue;
         }
 
-        println!("exploring with steps={}, keys: {:?}, pos: {:?}", ip.steps, ip.keys, ip.pos);
+        //println!("exploring with steps={}, keys: {:?}, pos: {:?}", ip.steps, ip.keys, ip.pos);
 
         let next_possible = all_keys.iter()
-            .filter_map(|(tile, coord)| if !ip.keys.0.contains(tile) { Some(coord) } else { None })
-            .map(|coord| all_paths.find_path(coord, &ip.pos, &ip.keys.0))
+            .filter_map(|(tile, coord)| if !ip.keys.contains(tile) { Some(coord) } else { None })
+            .map(|coord| all_paths.find_path(coord, &ip.pos, &ip.keys, PathMode::SingleKey))
             .filter_map(|p| p.map(|(steps, pos, keys)| (steps - 1, pos, keys)));
 
         let mut any = false;
@@ -148,12 +176,14 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
             let steps = ip.steps + more_steps;
 
             if pos == ip.pos {
-                println!("next_possible does not change pos: {:?} but steps = {} and keys = {:?}", pos, steps, keys);
+                pruned += 1;
+                //println!("next_possible does not change pos: {:?} but steps = {} and keys = {:?}", pos, steps, keys);
                 continue;
             }
 
-            if keys == ip.keys.0 {
-                println!("next_possible does not change keys: {:?} but steps = {} and pos = {:?}", keys, steps, pos);
+            if keys == ip.keys {
+                pruned += 1;
+                //println!("next_possible does not change keys: {:?} but steps = {} and pos = {:?}", keys, steps, pos);
                 continue;
             }
 
@@ -161,25 +191,24 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
 
             match solutions.peek() {
                 Some(cmp::Reverse(min)) if *min < steps => {
-                    println!(" ---> pruning {:?} to {:?} for {:?} with {} steps", ip.pos, pos, keys, steps);
+                    pruned += 1;
+                    //println!(" ---> pruning {:?} to {:?} for {:?} with {} steps", ip.pos, pos, keys, steps);
                     continue;
                 },
                 _ => {},
             }
 
-            let ip = InterestingPath {
-                steps,
-                keys: cmp::Reverse(keys),
-                pos
-            };
+            let keys = &ip.keys + &keys;
+            let ip = InterestingPath { steps, keys, pos };
 
             if visited.contains(&ip) {
-                println!(" ---> pruning {:?} {:?} {} steps", ip.pos, ip.keys.0, ip.steps);
+                pruned += 1;
+                //println!(" ---> pruning {:?} {:?} {} steps", ip.pos, ip.keys.0, ip.steps);
                 continue;
             }
 
-            println!(" ---> steps={}, keys: {:?}, pos: {:?}", steps, keys, pos);
-            frontier.push(cmp::Reverse(ip));
+            //println!(" ---> steps={}, keys: {:?}, pos: {:?}", steps, keys, pos);
+            frontier.push(ip);
 
             any = true;
         }
@@ -187,7 +216,7 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
         if any && !made_progress {
             println!("did not make any progress from {:?}", ip);
             let possible = all_keys.iter()
-                .filter_map(|(tile, coord)| if !ip.keys.0.contains(tile) { Some((tile, coord)) } else { None })
+                .filter_map(|(tile, coord)| if !ip.keys.contains(tile) { Some((tile, coord)) } else { None })
                 .collect::<Vec<_>>();
 
             println!("possible next:");
@@ -197,8 +226,8 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
 
             println!("next_possible:");
             for x in all_keys.iter()
-                    .filter_map(|(tile, coord)| if !ip.keys.0.contains(tile) { Some(coord) } else { None })
-                    .map(|coord| all_paths.find_path(coord, &ip.pos, &ip.keys.0))
+                    .filter_map(|(tile, coord)| if !ip.keys.contains(tile) { Some(coord) } else { None })
+                    .map(|coord| all_paths.find_path(coord, &ip.pos, &ip.keys, PathMode::SingleKey))
                     .filter_map(|p| p.map(|(steps, pos, keys)| (steps - 1, pos, keys)))
             {
                 println!("  {:?}", x);
@@ -207,14 +236,26 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
             panic!("could not make progress");
         }
 
+        let report = !any || (Instant::now() - last_progress_at).as_secs() >= 5;
+
         if !any {
-            if !all_keys_set.subset_of(&ip.keys.0) {
+            if !all_keys_set.subset_of(&ip.keys) {
                 continue;
             }
             solutions.push(cmp::Reverse(ip.steps));
             println!("found solution: {}", ip.steps);
         }
+
+        if report {
+            last_progress_at = Instant::now();
+            println!("|pruned| = {}, |solutions| = {}, |frontier| = {}, |visited| = {}", pruned, solutions.len(), frontier.len(), visited.len());
+        }
     }
+
+    let search_elapsed = Instant::now() - started_at;
+
+    println!("got all paths in {}.{:03}s", paths_elapsed.as_secs(), paths_elapsed.subsec_millis());
+    println!("searched through everything, |pruned| = {}, |visited| = {}, in {}.{:03}s", pruned, visited.len(), search_elapsed.as_secs(), search_elapsed.subsec_millis());
 
     match solutions.pop() {
         Some(cmp::Reverse(min)) => return min,
@@ -222,30 +263,57 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Ord, Hash, Clone)]
 struct InterestingPath {
     // ord: greatest keys (most keys) ... probably
-    keys: cmp::Reverse<KeySet>,
+    keys: KeySet,
     // ord: the shortest steps
     steps: usize,
     // ord: not really caring about the position
     pos: (i64, i64),
 }
 
+impl PartialOrd for InterestingPath {
+    fn partial_cmp(&self, rhs: &Self) -> Option<cmp::Ordering> {
+        match self.keys.cmp(&rhs.keys) {
+            cmp::Ordering::Equal => {},
+            x => return Some(x),
+        }
+
+        Some(self.steps.cmp(&rhs.steps))
+    }
+}
+
 struct AllPaths<'a, 'b> {
-    dist: &'a Array2<Option<u32>>,
     next: &'a Array2<Option<usize>>,
     vertices: &'a [((Word, Word), Tile)],
     index: &'a HashMap<&'b (Word, Word), usize>,
 }
 
+enum PathMode {
+    All,
+    SingleKey,
+}
+
+impl PathMode {
+    fn exit_early(&self, original_keys: &KeySet, gathered_keys: &KeySet) -> bool {
+        match *self {
+            PathMode::All => false,
+            PathMode::SingleKey => {
+                let keys = (gathered_keys.only_keys() - &original_keys.only_keys()).len();
+                keys > 1
+            }
+        }
+    }
+}
+
 impl<'a, 'b> AllPaths<'a, 'b> {
     // find path if it's possible with these keys
-    fn find_path(&self, a: &(Word, Word), b: &(Word, Word), keys: &KeySet) -> Option<(usize, (Word, Word), KeySet)> {
+    fn find_path(&self, a: &(Word, Word), b: &(Word, Word), keys: &KeySet, mode: PathMode) -> Option<(usize, (Word, Word), KeySet)> {
         let u = self.index[a];
         let v = self.index[b];
 
-        let mut path_keys = keys.clone();
+        let mut path_keys = KeySet::default();
         path_keys += &self.vertices[u].1;
         //let mut path = vec![self.vertices[u].0];
         let mut steps = 1;
@@ -269,6 +337,7 @@ impl<'a, 'b> AllPaths<'a, 'b> {
                 }
             };
             path_keys += &self.vertices[u].1;
+
             if !keys.can_open(&path_keys) {
                 return None;
             }
@@ -278,6 +347,10 @@ impl<'a, 'b> AllPaths<'a, 'b> {
             if u == v {
                 break;
             }
+
+            if mode.exit_early(&(keys + &path_keys), &path_keys) {
+                return None;
+            }
         }
 
         //Some((path, path_keys))
@@ -285,10 +358,8 @@ impl<'a, 'b> AllPaths<'a, 'b> {
     }
 }
 
-#[derive(Default, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, Hash, PartialEq, Eq, Ord)]
 struct KeySet(u64);
-
-use std::cmp;
 
 impl PartialOrd for KeySet {
     fn partial_cmp(&self, rhs: &Self) -> Option<cmp::Ordering> {
@@ -299,17 +370,11 @@ impl PartialOrd for KeySet {
     }
 }
 
-impl Ord for KeySet {
-    fn cmp(&self, rhs: &Self) -> cmp::Ordering {
-        self.partial_cmp(rhs).unwrap()
-    }
-}
-
 impl std::ops::Add<&Tile> for KeySet {
     type Output = KeySet;
 
     fn add(self, key: &Tile) -> KeySet {
-        let bit = Self::to_bit(key).unwrap_or_else(|nk| panic!("add given non-key: {}", nk));
+        let bit = to_bit(key).unwrap_or_else(|nk| panic!("add given non-key: {}", nk));
 
         if self.0 & bit == 0 {
             KeySet(self.0 | bit)
@@ -319,9 +384,17 @@ impl std::ops::Add<&Tile> for KeySet {
     }
 }
 
+impl std::ops::Add<&KeySet> for &KeySet {
+    type Output = KeySet;
+
+    fn add(self, rhs: &KeySet) -> KeySet {
+        KeySet(self.0 | rhs.0)
+    }
+}
+
 impl std::ops::AddAssign<&Tile> for KeySet {
     fn add_assign(&mut self, rhs: &Tile) {
-        let bit = match Self::to_bit(rhs) {
+        let bit = match to_bit(rhs) {
             Ok(bit) => bit,
             Err(_) => return,
         };
@@ -332,6 +405,18 @@ impl std::ops::AddAssign<&Tile> for KeySet {
     }
 }
 
+impl std::ops::Sub<&Tile> for &KeySet {
+    type Output = KeySet;
+
+    fn sub(self, rhs: &Tile) -> KeySet {
+        match to_bit(rhs) {
+            Ok(bit) => KeySet(self.0 & !bit),
+            Err(_) => KeySet(self.0)
+        }
+    }
+
+}
+
 impl std::ops::Sub<&KeySet> for KeySet {
     type Output = KeySet;
 
@@ -340,13 +425,18 @@ impl std::ops::Sub<&KeySet> for KeySet {
     }
 }
 
+fn to_bit(key: &Tile) -> Result<u64, &Tile> {
+    match key {
+        &Tile::Key(ch) => Ok(1 << (ch as u8 - b'a')),
+        &Tile::Door(ch) => Ok(1 << 32 + ch as u8 - b'A'),
+        x => Err(x),
+    }
+}
+
+
 impl KeySet {
-    fn to_bit(key: &Tile) -> Result<u64, &Tile> {
-        match key {
-            &Tile::Key(ch) => Ok(1 << (ch as u8 - b'a')),
-            &Tile::Door(ch) => Ok(1 << 32 + ch as u8 - b'A'),
-            x => Err(x),
-        }
+    fn all() -> Self {
+        Self(u64::max_value())
     }
 
     fn can_open(&self, doors: &KeySet) -> bool {
@@ -359,7 +449,7 @@ impl KeySet {
     }
 
     fn contains(&self, key: &Tile) -> bool {
-        match Self::to_bit(key) {
+        match to_bit(key) {
             Ok(bit) => self.0 & bit == bit,
             Err(_) => false,
         }
@@ -367,11 +457,6 @@ impl KeySet {
 
     fn subset_of(&self, rhs: &KeySet) -> bool {
         (self.0 & rhs.0) == self.0
-    }
-
-    fn key_count(&self) -> usize {
-        let keys = 0xffff_ffff;
-        (self.0 & keys).count_ones() as usize
     }
 
     fn only_keys(&self) -> Self {
@@ -382,6 +467,10 @@ impl KeySet {
     fn only_doors(&self) -> Self {
         let doors = !0x0000_0000_ffff_ffff;
         KeySet(self.0 & doors)
+    }
+
+    fn len(&self) -> usize {
+        self.0.count_ones() as usize
     }
 }
 
@@ -414,6 +503,15 @@ fn keyset_contains() {
 }
 
 #[test]
+fn keyset_difference() {
+    let mut a = KeySet::default();
+    a += &Tile::Key('a');
+    let empty = KeySet::default();
+    let diff = a.only_keys() - &empty.only_keys();
+    assert_eq!(diff.len(), 1);
+}
+
+#[test]
 fn keyset_for_all_keys_and_doors() {
     let mut ks = KeySet::default();
     let mut all = KeySet::default();
@@ -422,7 +520,6 @@ fn keyset_for_all_keys_and_doors() {
         let ascii = ascii as char;
         let prev = ks.clone();
 
-        let key = Tile::Key(ascii);
         let door = KeySet::default() + &Tile::Door(ascii.to_ascii_uppercase());
 
         assert!(!ks.can_open(&door));
@@ -466,9 +563,6 @@ impl fmt::Debug for KeySet {
     }
 }
 
-/// We can explain our travers with this?
-struct Waypoint((Word, Word), Tile);
-
 struct Map {
     gd: GameDisplay<Tile>,
     poi: HashMap<Tile, (Word, Word)>,
@@ -476,13 +570,6 @@ struct Map {
 }
 
 impl Map {
-    fn frontier<'a>(&'a self, pos: (Word, Word)) -> impl Iterator<Item = ((Word, Word), Tile)> + 'a {
-        match self.gd.get(&pos) {
-            Some(&Tile::Wall) | None => Either::Left(std::iter::empty()),
-            Some(t) => Either::Right(self.frontier_where(pos, t))
-        }
-    }
-
     fn frontier_where<'a>(&'a self, pos: (Word, Word), t: &'a Tile) -> impl Iterator<Item = ((Word, Word), Tile)> + 'a {
         let deltas = &[
             ( 0, -1), // up
@@ -574,7 +661,6 @@ impl FromStr for Map {
     type Err = InvalidTile;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        use std::collections::hash_map::Entry;
         let (mut gd, mut poi) = s
             .trim()
             .chars()
