@@ -12,6 +12,7 @@ dependencies = [
  "intcode 0.1.0",
  "itertools 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "ndarray 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "smallvec 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

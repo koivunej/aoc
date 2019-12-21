@@ -10,3 +10,4 @@ edition = "2018"
 intcode = { path = "../intcode" }
 ndarray = "0.13"
 itertools = "*"
+smallvec = "*"

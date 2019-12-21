@@ -8,6 +8,7 @@ use std::time::Instant;
 use std::cmp;
 use ndarray::Array2;
 use itertools::Either;
+use smallvec::{SmallVec, smallvec};
 
 fn main() {
     let mut map = String::new();
@@ -15,13 +16,51 @@ fn main() {
     let mut locked = stdin.lock();
     locked.read_to_string(&mut map).unwrap();
 
-    let map = Map::from_str(&map).unwrap();
-
-    println!("stage1: {}", steps_to_collect_all_keys(&map));
+    let mut map = Map::from_str(&map).unwrap();
+    let part = Part::Two;
+    println!("Part {:?}: {}", part, steps_to_collect_all_keys(&mut map, part));
 }
 
-fn steps_to_collect_all_keys(m: &Map) -> usize {
+#[derive(Debug, Clone, Copy)]
+enum Part {
+    #[allow(dead_code)]
+    One,
+    Two
+}
 
+fn steps_to_collect_all_keys(m: &mut Map, part: Part) -> usize {
+
+    let initial_positions = match part {
+        Part::One => smallvec![m.initial_position],
+        Part::Two => {
+
+            // expand the map around the portal
+            let mut around = vec![
+                (-1,-1), ( 0,-1), ( 1,-1),
+                (-1, 0), ( 0, 0), ( 1, 0),
+                (-1, 1), ( 0, 1), ( 1, 1),
+            ];
+
+            let initial = m.initial_position;
+
+            around.iter_mut().for_each(|p| *p = (p.0 + initial.0, p.1 + initial.1));
+
+            let ret = smallvec![around[0], around[2], around[6], around[8]];
+
+            for x in around {
+                if ret.contains(&x) {
+                    m.gd.insert(&x, Tile::Empty);
+                    continue;
+                }
+                m.gd.insert(&x, Tile::Wall);
+            }
+
+            ret
+        }
+    };
+
+    // vertice count could be dropped by somehow finding paths between vertices faster than ...
+    // finding all paths ... or if empties near corners would just be kept?
     let vertices = m.gd.cells().iter()
         .enumerate()
         .filter_map(|(i, t)| match t {
@@ -132,7 +171,7 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
     frontier.push(InterestingPath {
         steps: 0,
         keys: KeySet::default(),
-        pos: m.initial_position,
+        pos: initial_positions,
     });
 
     let mut visited = HashSet::new();
@@ -143,7 +182,7 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
     let mut pruned = 0;
 
     // thought about building the key dependency poset but the filter on next_possible below does
-    // that already
+    // that already.
 
     while let Some(ip) = frontier.pop() {
 
@@ -163,54 +202,58 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
 
         //println!("exploring with steps={}, keys: {:?}, pos: {:?}", ip.steps, ip.keys, ip.pos);
 
-        let next_possible = all_keys.iter()
-            .filter_map(|(tile, coord)| if !ip.keys.contains(tile) { Some(coord) } else { None })
-            .map(|coord| all_paths.find_path(coord, &ip.pos, &ip.keys, PathMode::SingleKey))
-            .filter_map(|p| p.map(|(steps, pos, keys)| (steps - 1, pos, keys)));
-
         let mut any = false;
         let mut made_progress = false;
 
-        for (more_steps, pos, keys) in next_possible {
+        for (robot, robot_pos) in ip.pos.iter().copied().enumerate() {
+            let next_possible = all_keys.iter()
+                .filter_map(|(tile, coord)| if !ip.keys.contains(tile) { Some(coord) } else { None })
+                .filter_map(|coord| all_paths.find_path(coord, &robot_pos, &ip.keys, PathMode::SingleKey))
+                .map(|(steps, pos, keys)| (steps - 1, pos, keys));
 
-            let steps = ip.steps + more_steps;
+            for (more_steps, pos, keys) in next_possible {
 
-            if pos == ip.pos {
-                pruned += 1;
-                //println!("next_possible does not change pos: {:?} but steps = {} and keys = {:?}", pos, steps, keys);
-                continue;
-            }
+                let steps = ip.steps + more_steps;
 
-            if keys == ip.keys {
-                pruned += 1;
-                //println!("next_possible does not change keys: {:?} but steps = {} and pos = {:?}", keys, steps, pos);
-                continue;
-            }
-
-            made_progress = true;
-
-            match solutions.peek() {
-                Some(cmp::Reverse(min)) if *min < steps => {
+                if pos == robot_pos {
                     pruned += 1;
-                    //println!(" ---> pruning {:?} to {:?} for {:?} with {} steps", ip.pos, pos, keys, steps);
+                    //println!("next_possible does not change pos: {:?} but steps = {} and keys = {:?}", pos, steps, keys);
                     continue;
-                },
-                _ => {},
+                }
+
+                if keys == ip.keys {
+                    pruned += 1;
+                    //println!("next_possible does not change keys: {:?} but steps = {} and pos = {:?}", keys, steps, pos);
+                    continue;
+                }
+
+                made_progress = true;
+
+                match solutions.peek() {
+                    Some(cmp::Reverse(min)) if *min < steps => {
+                        pruned += 1;
+                        //println!(" ---> pruning {:?} to {:?} for {:?} with {} steps", ip.pos, pos, keys, steps);
+                        continue;
+                    },
+                    _ => {},
+                }
+
+                let keys = &ip.keys + &keys;
+                let mut next_positions = ip.pos.clone();
+                next_positions[robot] = pos;
+                let ip = InterestingPath { steps, keys, pos: next_positions };
+
+                if visited.contains(&ip) {
+                    pruned += 1;
+                    //println!(" ---> pruning {:?} {:?} {} steps", ip.pos, ip.keys.0, ip.steps);
+                    continue;
+                }
+
+                //println!(" ---> steps={}, keys: {:?}, pos: {:?}", steps, keys, pos);
+                frontier.push(ip);
+
+                any = true;
             }
-
-            let keys = &ip.keys + &keys;
-            let ip = InterestingPath { steps, keys, pos };
-
-            if visited.contains(&ip) {
-                pruned += 1;
-                //println!(" ---> pruning {:?} {:?} {} steps", ip.pos, ip.keys.0, ip.steps);
-                continue;
-            }
-
-            //println!(" ---> steps={}, keys: {:?}, pos: {:?}", steps, keys, pos);
-            frontier.push(ip);
-
-            any = true;
         }
 
         if any && !made_progress {
@@ -224,13 +267,16 @@ fn steps_to_collect_all_keys(m: &Map) -> usize {
                 println!("  {:?}", x);
             }
 
-            println!("next_possible:");
-            for x in all_keys.iter()
-                    .filter_map(|(tile, coord)| if !ip.keys.contains(tile) { Some(coord) } else { None })
-                    .map(|coord| all_paths.find_path(coord, &ip.pos, &ip.keys, PathMode::SingleKey))
-                    .filter_map(|p| p.map(|(steps, pos, keys)| (steps - 1, pos, keys)))
-            {
-                println!("  {:?}", x);
+            for (i, robot_pos) in ip.pos.iter().copied().enumerate() {
+                println!("next_possible(robot={}, pos={:?}):", i, robot_pos);
+                for x in all_keys.iter()
+                        .filter_map(|(tile, coord)| if !ip.keys.contains(tile) { Some(coord) } else { None })
+                        .map(|coord| all_paths.find_path(coord, &robot_pos, &ip.keys, PathMode::SingleKey))
+                        .filter_map(|p| p.map(|(steps, pos, keys)| (steps - 1, pos, keys)))
+                {
+                    println!("  {:?}", x);
+                }
+                println!();
             }
 
             panic!("could not make progress");
@@ -270,7 +316,7 @@ struct InterestingPath {
     // ord: the shortest steps
     steps: usize,
     // ord: not really caring about the position
-    pos: (i64, i64),
+    pos: SmallVec<[(i64, i64); 4]>,
 }
 
 impl PartialOrd for InterestingPath {
