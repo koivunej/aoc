@@ -2,8 +2,8 @@ use intcode::{util::GameDisplay, Word};
 use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
-use std::collections::{HashMap, HashSet, VecDeque};
-use ndarray::{s, Array2};
+use std::collections::HashMap;
+use ndarray::Array2;
 use itertools::Either;
 
 fn main() {
@@ -20,9 +20,12 @@ fn steps_to_collect_all_keys(m: &mut Map) -> usize {
         })
         .collect::<Vec<_>>();
 
+    // this index is used because the vertices dont include the walls so it complicates.
+    // wasted time because the floyd warshall is something to the n^3 and the input seemed
+    // to have lot of walls
     let vertices_index = vertices.iter()
         .enumerate()
-        .map(|(i, (coords, tile))| (coords, i))
+        .map(|(i, (coords, _))| (coords, i))
         .collect::<HashMap<_, _>>();
 
     let edges = vertices.iter()
@@ -32,8 +35,6 @@ fn steps_to_collect_all_keys(m: &mut Map) -> usize {
     let mut dist = ndarray::Array2::<Option<u32>>::from_elem((vertices.len(), vertices.len()), None);
     let mut next = ndarray::Array2::<Option<usize>>::from_elem((vertices.len(), vertices.len()), None);
 
-    //let edges = vertices.iter().enumerate().flat_map(|(i, (pos, _))| m.frontier(&pos).map(move |(next, _)| (pos, next, 1)));
-
     for (from, to) in edges {
         dist[(from, to)] = Some(1);
         dist[(to, from)] = Some(1);
@@ -42,9 +43,7 @@ fn steps_to_collect_all_keys(m: &mut Map) -> usize {
     }
 
     for (i, _) in vertices.iter().enumerate() {
-        assert_eq!(dist[(i, i)], None);
         next[(i, i)] = Some(i);
-        //dist[(i, i)] = 0;
     }
 
     for k in 0..vertices.len() {
@@ -64,6 +63,8 @@ fn steps_to_collect_all_keys(m: &mut Map) -> usize {
                 }
 
                 let lhs = &mut dist[(i, j)];
+
+                // not really sure why this floyd warshall imitation works but it seems to work
 
                 if rhs.is_some() && (lhs.is_none() || lhs.unwrap() > rhs.unwrap()) {
                     let rhs = rhs.unwrap();
@@ -98,7 +99,7 @@ fn steps_to_collect_all_keys(m: &mut Map) -> usize {
         choices.extend(
             all_keys.iter()
                 .enumerate()
-                .map(|(i, (tile, coord))| (i, *tile, all_paths.find_path(coord, &pos, None, &keys)))
+                .map(|(i, (tile, coord))| (i, *tile, all_paths.find_path(coord, &pos, &keys)))
                 .filter_map(|(i, t, p)| p.map(|(path, keys)| (i, path.len() - 1, *path.first().unwrap(), t, keys)))
         );
 
@@ -142,6 +143,7 @@ fn steps_to_collect_all_keys(m: &mut Map) -> usize {
     steps
 }
 
+/*
 struct InterestingPath {
     steps: usize,
     end_up_at: (i64, i64),
@@ -157,6 +159,7 @@ impl From<(Vec<(Word, Word)>, KeySet)> for InterestingPath {
         }
     }
 }
+*/
 
 struct AllPaths<'a, 'b> {
     dist: &'a Array2<Option<u32>>,
@@ -166,11 +169,10 @@ struct AllPaths<'a, 'b> {
 }
 
 impl<'a, 'b> AllPaths<'a, 'b> {
-    fn find_path(&self, a: &(Word, Word), b: &(Word, Word), max_len: Option<usize>, keys: &KeySet) -> Option<(Vec<(Word, Word)>, KeySet)> {
+    // find path if it's possible with these keys
+    fn find_path(&self, a: &(Word, Word), b: &(Word, Word), keys: &KeySet) -> Option<(Vec<(Word, Word)>, KeySet)> {
         let u = self.index[a];
         let v = self.index[b];
-
-        assert_ne!(max_len, Some(0));
 
         let mut path_keys = KeySet::default();
         path_keys += &self.vertices[u].1;
@@ -183,17 +185,11 @@ impl<'a, 'b> AllPaths<'a, 'b> {
             }
         };
 
+        // FIXME: the path len might be all we need
         path_keys += &self.vertices[u].1;
         path.push(self.vertices[u].0);
 
         loop {
-            match (path.len(), max_len) {
-                (x, Some(y)) if x >= y => {
-                    return None;
-                },
-                _ => {},
-            }
-
             u = match self.next[(u, v)] {
                 Some(u) => u,
                 None => {
