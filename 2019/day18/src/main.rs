@@ -184,6 +184,7 @@ fn steps_to_collect_all_keys(m: &mut Map, part: Part) -> usize {
     // thought about building the key dependency poset but the filter on next_possible below does
     // that already.
 
+    // this is ... some bad greedy bfs. should learn how to transform this into dijsktra.
     while let Some(ip) = frontier.pop() {
 
         if let Some(cmp::Reverse(min)) = solutions.peek() {
