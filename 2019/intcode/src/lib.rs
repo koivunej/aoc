@@ -113,6 +113,15 @@ impl<'a> From<&'a [Word]> for Memory<'static> {
     }
 }
 
+impl From<Vec<Word>> for Memory<'static> {
+    fn from(mem: Vec<Word>) -> Self {
+        Memory {
+            mem: RawMemory::Owned(mem),
+            expansion: None,
+        }
+    }
+}
+
 impl<'a> Memory<'a> {
 
     fn read(&self, addr: usize) -> Result<Word, InvalidReadAddress> {
