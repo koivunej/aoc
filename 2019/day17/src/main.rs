@@ -31,20 +31,6 @@ fn alignment_parameters(gd: &GameDisplay<Tile>) -> i64 {
             continue;
         }
 
-        /*
-        if let Some(prev) = prev {
-            let d = (pos.0 - prev.0, pos.1 - prev.1);
-            let same_dir = (pos.0 + d.0, pos.1 + d.1);
-
-            match gd.get(&same_dir) {
-                Some(x) if x.can_visit() => {
-                    pending.push_back((Some(pos), same_dir));
-                    continue;
-                },
-                _ => {}
-            }
-        }*/
-
         let next = [
             (0, 1),
             (1, 0),
