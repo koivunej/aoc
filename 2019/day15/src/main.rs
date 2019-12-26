@@ -1,7 +1,6 @@
 use std::fmt;
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashSet};
 use intcode::{Word, util::{parse_stdin_program, GameDisplay}, Program, Registers, ExecutionState};
-use std::io::Write;
 
 fn main() {
     let mut robot = Robot::new(parse_stdin_program());
@@ -9,52 +8,53 @@ fn main() {
 
     gd.insert(robot.position(), Tile::Empty);
 
-    let mut work = VecDeque::new();
-    work.push_back(*robot.position());
-
     let mut oxygen_at = None;
+    {
+        let mut work = VecDeque::new();
+        work.push_back(*robot.position());
 
-    while let Some(root) = work.pop_front() {
+        while let Some(root) = work.pop_front() {
 
-        // perhaps robot.travel(&root, &gd)?
-        while root != *robot.position() {
-            match path_to(&gd, robot.position(), &root) {
-                Some(directions) => {
-                    for d in directions {
-                        let prev = *robot.position();
-                        let (moved_to, _) = robot.try_move(d);
-                        assert_ne!(prev, moved_to);
-                    }
-                },
-                None => panic!("Cannot get from {:?} to {:?}", robot.position(), root),
-            }
-        }
-
-        let unexplored = Direction::all()
-            .map(|d| (d, root.step_in_direction(&d)))
-            .filter_map(|(d, p)| match gd.get(&p) {
-                Some(Tile::Unexplored) | None => Some((d, p)),
-                Some(_) => None,
-            })
-            .collect::<Vec<_>>();
-
-        for (d, target) in unexplored {
-            let (ended_up, tile) = robot.try_move(d);
-
-            if tile == Tile::Oxygen {
-                assert!(oxygen_at.is_none());
-                oxygen_at = Some(ended_up);
+            // perhaps robot.travel(&root, &gd)?
+            while root != *robot.position() {
+                match path_to(&gd, robot.position(), &root) {
+                    Some(directions) => {
+                        for d in directions {
+                            let prev = *robot.position();
+                            let (moved_to, _) = robot.try_move(d);
+                            assert_ne!(prev, moved_to);
+                        }
+                    },
+                    None => panic!("Cannot get from {:?} to {:?}", robot.position(), root),
+                }
             }
 
-            if target == ended_up {
-                gd.insert(&target, tile);
-                // push to the same side as we are popping will decrease the amount of running
-                // around on the map so maybe depth first?
-                work.push_front(target);
-                let (back_at, _) = robot.try_move(d.reverse());
-                assert_eq!(back_at, root);
-            } else {
-                gd.insert(&target, tile);
+            let unexplored = Direction::all()
+                .map(|d| (d, root.step_in_direction(&d)))
+                .filter_map(|(d, p)| match gd.get(&p) {
+                    Some(Tile::Unexplored) | None => Some((d, p)),
+                    Some(_) => None,
+                })
+                .collect::<Vec<_>>();
+
+            for (d, target) in unexplored {
+                let (ended_up, tile) = robot.try_move(d);
+
+                if tile == Tile::Oxygen {
+                    assert!(oxygen_at.is_none());
+                    oxygen_at = Some(ended_up);
+                }
+
+                if target == ended_up {
+                    gd.insert(&target, tile);
+                    // push to the same side as we are popping will decrease the amount of running
+                    // around on the map so maybe depth first?
+                    work.push_front(target);
+                    let (back_at, _) = robot.try_move(d.reverse());
+                    assert_eq!(back_at, root);
+                } else {
+                    gd.insert(&target, tile);
+                }
             }
         }
     }
@@ -63,8 +63,52 @@ fn main() {
     println!("robot moves: {}", robot.moves);
 
     println!("stage1: {}", path_to(&gd, &( 0, 0), oxygen_at.as_ref().unwrap()).unwrap().len());
+
+    {
+        // stage2 is probably just a dfs from the oxygen, mark the coordinates and ... push all new
+        // marked ones to the queue?
+        let mut frontier = VecDeque::new();
+        let mut oxygen = HashSet::new();
+
+        oxygen.insert(oxygen_at.unwrap());
+        frontier.push_back((oxygen_at.unwrap(), 0));
+
+        let mut prev_time = 0;
+
+        let mut minutes = 0;
+
+        while let Some((p1, time)) = frontier.pop_front() {
+
+            oxygen.insert(p1);
+
+            if prev_time != time {
+                assert!(prev_time < time, "{} should be less than {}", prev_time, time);
+
+                prev_time = time;
+                minutes += 1;
+
+                println!("{:>3} minutes ... {} slots oxygenated", minutes, oxygen.len());
+            }
+
+            let unoxinated = Direction::all()
+                .map(|d| p1.step_in_direction(&d))
+                .filter_map(|p| match gd.get(&p) {
+                    Some(Tile::Empty) => Some(p),
+                    Some(_) | None => None,
+                })
+                .filter(|p| !oxygen.contains(&p))
+                .collect::<Vec<_>>();
+
+            for p2 in unoxinated {
+                frontier.push_back((p2, time + 1));
+            }
+        }
+
+        println!("stage2: {}", minutes);
+    }
 }
 
+/// Wasteful dijkstra ... could share the hashmaps across queries maybe?
 fn path_to(gd: &GameDisplay<Tile>, pos: &(Word, Word), target: &(Word, Word)) -> Option<Vec<Direction>> {
     //println!("path_to: {:?} to {:?}", pos, target);
     use std::collections::{HashMap, BinaryHeap};
@@ -189,7 +233,7 @@ fn adjacent<'a>(gd: &'a GameDisplay<Tile>, pos: &'a (Word, Word)) -> impl Iterat
         .filter_map(move |(p2, d)| gd.get(&p2).map(|t| (p2, d, t)))
         //.inspect(|x| println!("  c: {:?}", x))
         .filter_map(|(p2, d, t)| match t {
-            &Tile::Empty | &Tile::RobotWas | &Tile::Robot | &Tile::Oxygen => Some((p2, d)),
+            &Tile::Empty | &Tile::Robot | &Tile::Oxygen => Some((p2, d)),
             _ => None,
         })
         //.inspect(|x| println!("  d: {:?}", x))
@@ -318,7 +362,6 @@ enum Tile {
     Empty,
     Oxygen,
     Robot,
-    RobotWas,
     Unexplored
 }
 
@@ -334,7 +377,6 @@ impl fmt::Display for Tile {
             Tile::Wall => '#',
             Tile::Empty => ' ',
             Tile::Oxygen => 'o',
-            Tile::RobotWas => ' ',
             Tile::Robot => 'R',
             Tile::Unexplored => '?'
         };
