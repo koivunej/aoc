@@ -185,7 +185,6 @@ mod gamedisplay {
                 self.cells.push(t);
                 self.width = 1;
                 self.height = 1;
-                println!("gd: initial for {:?}", p);
                 return;
             }
 
@@ -198,11 +197,8 @@ mod gamedisplay {
 
                 // this could be Result<index, OutsideCoordinates::Before(Word, Word)> where err would be "how much outside"
                 if let Some(index) = self.to_index(p) {
-                    println!("gd: completed for {:?} -> {} of sz={:?}, min={:?}", p, index, (self.width, self.height), self.smallest_coordinates);
                     self.cells[index] = t;
                     return;
-                } else {
-                    println!("gd: failed to convert {:?} to index, w={}, h={}, smallest={:?}", p, self.width, self.height, self.smallest_coordinates);
                 }
 
                 let g = Growth::from_setup(
@@ -270,7 +266,6 @@ mod gamedisplay {
                                 next.extend(cells.drain(..size.0));
                             },
                             Position::After => {
-                                println!("draining {:?} out of {}", ..size.0, cells.len());
                                 next.extend(cells.drain(..size.0));
                                 next.extend(new_columns.iter().cloned());
                             },
@@ -481,7 +476,6 @@ mod gamedisplay {
             .enumerate();
 
         for (i, (x, y)) in checks {
-            println!("{} ({}, {})", i, x, y);
             assert_eq!(contents.get(i), gd.get(&(x, y)), "Failed at index {} or ({}, {})", i, x, y);
         }
 
@@ -511,8 +505,6 @@ mod gamedisplay {
         gd.insert(&( 1,-2), a);
         gd.insert(&( 2,-1), a);
         gd.insert(&( 0, 2), a);
-
-        println!("{}", gd);
     }
 
     #[test]
@@ -526,7 +518,6 @@ mod gamedisplay {
         gd.insert(&( 0, 1), a);
         gd.insert(&(-1, 0), a);
         gd.insert(&( 1, 1), a);
-        println!("{}", gd);
         gd.insert(&( 0, 2), a);
 
     }

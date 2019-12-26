@@ -51,6 +51,15 @@ enum RawMemory<'a> {
     Owned(Vec<Word>),
 }
 
+impl<'a> Clone for RawMemory<'a> {
+    fn clone(&self) -> RawMemory<'static> {
+        match *self {
+            RawMemory::Borrowed(ref uniq) => RawMemory::Owned(uniq.to_vec()),
+            RawMemory::Owned(ref v) => RawMemory::Owned(v.clone()),
+        }
+    }
+}
+
 impl<'a> From<&'a mut [Word]> for RawMemory<'a> {
     fn from(m: &'a mut [Word]) -> Self {
         RawMemory::Borrowed(m)
@@ -90,6 +99,7 @@ impl<'a> RawMemory<'a> {
 }
 
 /// State of a single program.
+#[derive(Clone)]
 pub struct Memory<'a> {
     mem: RawMemory<'a>,
     expansion: Option<Vec<Word>>, // None if expanded memory is not supported

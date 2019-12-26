@@ -5,6 +5,7 @@ use crate::error::{InvalidProgram, ProgramError};
 use crate::instr::{Operation, OpCode, ParameterModes};
 use std::convert::TryFrom;
 
+#[derive(Clone)]
 pub struct Program<'a> {
     mem: Memory<'a>,
 }
