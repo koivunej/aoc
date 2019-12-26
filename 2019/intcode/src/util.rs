@@ -177,86 +177,237 @@ mod gamedisplay {
     impl<T: Default + Clone> GameDisplay<T> {
 
         pub fn insert(&mut self, p: &(Word, Word), t: T) {
+            // protect against infinite loops
+            let mut gas = 3usize;
+
             if self.cells.is_empty() {
                 self.smallest_coordinates = *p;
                 self.cells.push(t);
                 self.width = 1;
                 self.height = 1;
+                println!("gd: initial for {:?}", p);
                 return;
             }
 
             loop {
+                if let Some(next_gas) = gas.checked_sub(1) {
+                    gas = next_gas;
+                } else {
+                    panic!("ran out of gas while trying to insert {:?}, w={}, h={}, smallest={:?}", p, self.width, self.height, self.smallest_coordinates);
+                }
 
                 // this could be Result<index, OutsideCoordinates::Before(Word, Word)> where err would be "how much outside"
                 if let Some(index) = self.to_index(p) {
+                    println!("gd: completed for {:?} -> {} of sz={:?}, min={:?}", p, index, (self.width, self.height), self.smallest_coordinates);
                     self.cells[index] = t;
                     return;
+                } else {
+                    println!("gd: failed to convert {:?} to index, w={}, h={}, smallest={:?}", p, self.width, self.height, self.smallest_coordinates);
                 }
 
-                let (x, y) = *p;
-                let (mut dx, mut dy) = (x - self.smallest_coordinates.0, y - self.smallest_coordinates.1);
+                let g = Growth::from_setup(
+                    (self.width, self.height),
+                    self.smallest_coordinates,
+                    *p);
 
-                if dx > 0 {
-                    dx -= self.width as Word;
-                    dx += 1;
-                    // this can become zero if we didn't need to grow there
-                    assert!(dx >= 0);
-                }
+                let g = g.unwrap();
 
-                if dy > 0 {
-                    dy -= self.height as Word;
-                    dy += 1;
-                    // same as with dx and the zero
-                    assert!(dy >= 0);
-                }
+                let mut size = (self.width, self.height);
 
-                assert!(dx != 0 || dy != 0, "Both directions became zero for {:?} when {}x{} and {:?}", p, self.width, self.height, self.smallest_coordinates);
+                g.grow(&mut self.cells, &mut size, &mut self.smallest_coordinates);
 
-                if dx != 0 {
-                    // we need to grow columns
-                    let mut next = Vec::new();
-                    let next_len = (self.width + dx.abs() as usize) * self.height;
-                    next.reserve(next_len);
-                    std::mem::swap(&mut self.cells, &mut next);
+                self.width = size.0;
+                self.height = size.1;
+            }
+        }
+    }
 
-                    while self.cells.len() < next_len {
-                        if dx < 0 {
-                            for _ in 0..dx.abs() {
-                                self.cells.push(T::default());
-                            }
-                        }
-                        self.cells.extend(next.drain(..self.width));
-                        if dx > 0 {
-                            for _ in 0..dx.abs() {
-                                self.cells.push(T::default());
-                            }
-                        }
-                    }
+    #[derive(Debug, PartialEq, Eq)]
+    enum Direction { Width, Height }
 
-                    if dx < 0 {
-                        self.smallest_coordinates.0 += dx;
-                    }
-                    self.width += dx.abs() as usize;
-                    continue;
-                }
+    #[derive(Debug, PartialEq, Eq)]
+    enum Position { Before, After }
 
-                // need to prepend lines
-                let mut next = vec![T::default(); self.width() * dy.abs() as usize];
-                if dy < 0 {
-                    next.reserve(self.cells.len());
-                    std::mem::swap(&mut self.cells, &mut next);
-                    // names get confusing here but for a while "next" contains our previous cells
-                    // which are then moved to the end of the game board
-                }
-                self.cells.extend(next.into_iter());
+    #[derive(Debug, PartialEq, Eq)]
+    struct Growth(Direction, Position, usize);
 
-                if dy < 0 {
-                    self.smallest_coordinates.1 += dy;
-                }
-                self.height += dy.abs() as usize;
+    impl Growth {
+        fn from_setup((w, h): (usize, usize), (minx, miny): (Word, Word), (x, y): (Word, Word)) -> Option<Growth> {
+            use std::convert::TryFrom;
+
+            let w = w as Word;
+            let h = h as Word;
+
+            // inclusive max{x,y}
+            let maxx = minx + w - 1;
+            let maxy = miny + h - 1;
+
+            if x < minx {
+                Some(Growth(Direction::Width, Position::Before, usize::try_from((x - minx).abs()).unwrap()))
+            } else if x > maxx {
+                Some(Growth(Direction::Width, Position::After, usize::try_from((x - maxx).abs()).unwrap()))
+            } else if y < miny {
+                Some(Growth(Direction::Height, Position::Before, usize::try_from((y - miny).abs()).unwrap()))
+            } else if y > maxy {
+                Some(Growth(Direction::Height, Position::After, usize::try_from((y - maxy).abs()).unwrap()))
+            } else {
+                None
             }
         }
 
+        fn grow<T: Clone + Default>(&self, mut cells: &mut Vec<T>, size: &mut (usize, usize), min: &mut (Word, Word)) {
+            assert_eq!(cells.len(), size.0 * size.1);
+            match *self {
+                Growth(Direction::Width, ref p, columns) => {
+                    let new_columns = vec![T::default(); columns];
+
+                    let mut next = Vec::with_capacity((size.0 + columns) * size.1);
+
+                    for _ in 0..size.1 {
+                        match *p {
+                            Position::Before => {
+                                next.extend(new_columns.iter().cloned());
+                                next.extend(cells.drain(..size.0));
+                            },
+                            Position::After => {
+                                println!("draining {:?} out of {}", ..size.0, cells.len());
+                                next.extend(cells.drain(..size.0));
+                                next.extend(new_columns.iter().cloned());
+                            },
+                        }
+                    }
+
+                    assert!(cells.is_empty());
+                    std::mem::swap(&mut next, &mut cells);
+
+                    if p == &Position::Before {
+                        min.0 -= columns as Word;
+                    }
+
+                    size.0 += columns;
+                },
+                Growth(Direction::Height, ref p, rows) => {
+                    let new_row = vec![T::default(); size.0];
+
+                    match *p {
+                        Position::Before => {
+                            let mut next = Vec::with_capacity(size.0 * (size.1 + rows));
+
+                            if rows > 1 {
+                                for _ in 0..(rows - 1) {
+                                    next.extend(new_row.iter().cloned());
+                                }
+                            }
+                            next.extend(new_row);
+
+                            next.extend(cells.drain(..));
+                            std::mem::swap(&mut next, &mut cells);
+
+                            min.1 -= rows as Word;
+                        },
+                        Position::After => {
+                            if rows > 1 {
+                                for _ in 0..(rows - 1) {
+                                    cells.extend(new_row.iter().cloned());
+                                }
+                            }
+                            cells.extend(new_row);
+                        }
+                    }
+
+                    size.1 += rows;
+                }
+            }
+            assert_eq!(cells.len(), size.0 * size.1);
+        }
+
+    }
+
+    #[test]
+    fn grow_positive_one() {
+        // assume singleton at (0,0)
+        assert_eq!(Growth::from_setup(( 1, 1), ( 0, 0), ( 1, 1)), Some(Growth(Direction::Width, Position::After, 1)));
+        assert_eq!(Growth::from_setup(( 2, 1), ( 0, 0), ( 1, 1)), Some(Growth(Direction::Height, Position::After, 1)));
+    }
+
+    #[test]
+    fn growth_growing() {
+        growth_scenario(
+            Growth(Direction::Width, Position::Before, 1),
+            vec!['x'], (1, 1), (0, 0),
+            vec!['\0', 'x'], (2, 1), (-1, 0));
+
+        growth_scenario(
+            Growth(Direction::Width, Position::After, 1),
+            vec!['x'], (1, 1), (0, 0),
+            vec!['x', '\0'], (2, 1), (0, 0));
+
+        growth_scenario(
+            Growth(Direction::Height, Position::Before, 1),
+            vec!['x'], (1, 1), (0, 0),
+            vec!['\0', 'x'], (1, 2), (0, -1));
+
+        growth_scenario(
+            Growth(Direction::Height, Position::After, 1),
+            vec!['x'], (1, 1), (0, 0),
+            vec!['x', '\0'], (1, 2), (0, 0));
+    }
+
+    #[cfg(test)]
+    fn growth_scenario<T: PartialEq + Clone + Default + fmt::Debug>(
+        g: Growth,
+        mut initial: Vec<T>,
+        mut size: (usize, usize),
+        mut min: (Word, Word),
+        expected_cells: Vec<T>,
+        expected_size: (usize, usize),
+        expected_min: (Word, Word))
+    {
+        g.grow(&mut initial, &mut size, &mut min);
+        assert_eq!(expected_cells, initial);
+        assert_eq!(expected_size, size);
+        assert_eq!(expected_min, min);
+    }
+
+
+    #[test]
+    fn positive_growth_not_needed() {
+        assert_eq!(Growth::from_setup(( 2, 2), ( 0, 0), ( 1, 1)), None);
+        assert_eq!(Growth::from_setup(( 2, 2), ( 0, 0), ( 0, 1)), None);
+        assert_eq!(Growth::from_setup(( 2, 2), ( 0, 0), ( 1, 0)), None);
+        assert_eq!(Growth::from_setup(( 2, 2), ( 0, 0), ( 0, 0)), None);
+    }
+
+    #[test]
+    fn grow_positive_jump() {
+        assert_eq!(Growth::from_setup(( 1, 1), ( 0, 0), ( 0,10)), Some(Growth(Direction::Height, Position::After, 10)));
+        assert_eq!(Growth::from_setup(( 1, 1), ( 0, 0), (10, 0)), Some(Growth(Direction::Width, Position::After, 10)));
+    }
+
+    #[test]
+    fn grow_negative_one() {
+        //    |
+        //    |
+        //----O----
+        //   x|
+        //    |
+        assert_eq!(Growth::from_setup(( 1, 1), ( 0, 0), (-1,-1)), Some(Growth(Direction::Width, Position::Before, 1)));
+        assert_eq!(Growth::from_setup(( 2, 1), (-1, 0), (-1,-1)), Some(Growth(Direction::Height, Position::Before, 1)));
+    }
+
+    #[test]
+    fn negative_growth_not_needed() {
+        assert_eq!(Growth::from_setup(( 2, 2), (-1,-1), (-1,-1)), None);
+        assert_eq!(Growth::from_setup(( 2, 2), (-1,-1), ( 0,-1)), None);
+        assert_eq!(Growth::from_setup(( 2, 2), (-1,-1), (-1, 0)), None);
+        assert_eq!(Growth::from_setup(( 2, 2), (-1,-1), ( 0, 0)), None);
+    }
+
+    #[test]
+    fn grow_negative_more() {
+        assert_eq!(Growth::from_setup(( 2, 2), ( 0, 0), (-1,-1)), Some(Growth(Direction::Width, Position::Before, 1)));
+        assert_eq!(Growth::from_setup(( 3, 2), (-1, 0), (-1,-1)), Some(Growth(Direction::Height, Position::Before, 1)));
+        assert_eq!(Growth::from_setup(( 3, 3), (-1,-1), (-1,-1)), None);
     }
 
     #[test]
@@ -343,6 +494,41 @@ mod gamedisplay {
             assert_eq!(None, gd.get(&(x, -2)));
             assert_eq!(None, gd.get(&(x,  3)));
         }
+    }
+
+    #[test]
+    fn first_bug_while_day15() {
+        let mut gd: GameDisplay<char> = GameDisplay::default();
+
+        let a = 'a';
+
+        gd.insert(&( 0, 0), a);
+        gd.insert(&( 0,-1), a);
+        gd.insert(&( 1, 0), a);
+        gd.insert(&( 0, 0), a);
+        gd.insert(&( 1,-1), a);
+        gd.insert(&( 1, 0), a);
+        gd.insert(&( 1,-2), a);
+        gd.insert(&( 2,-1), a);
+        gd.insert(&( 0, 2), a);
+
+        println!("{}", gd);
+    }
+
+    #[test]
+    fn second_bug_while_day15() {
+        let mut gd: GameDisplay<char> = GameDisplay::default();
+
+        let a = 'a';
+
+        gd.insert(&( 0,-1), a);
+        gd.insert(&( 1, 0), a);
+        gd.insert(&( 0, 1), a);
+        gd.insert(&(-1, 0), a);
+        gd.insert(&( 1, 1), a);
+        println!("{}", gd);
+        gd.insert(&( 0, 2), a);
+
     }
 }
 
