@@ -221,9 +221,9 @@ impl<'a> fmt::Display for Instructions<'a> {
         for action in elements {
             if !first {
                 write!(fmt, ",")?;
-            } else {
-                first = false;
             }
+
+            first = false;
 
             match action {
                 Action::TurnLeft => write!(fmt, "L"),
@@ -262,7 +262,6 @@ impl<'a> Instructions<'a> {
                 }
             })
             .filter_map(|x| x)
-            //.inspect(|x| println!("item: {:?}", x))
     }
 
     fn compress(&self) -> (Vec<Action>, Vec<Action>, Vec<Action>, Vec<Action>) {
@@ -291,8 +290,6 @@ impl<'a> Instructions<'a> {
                     continue;
                 }
 
-                //println!("{:>3}: [{}] [{}] [{}] [{}]", main.len(), Instructions(main.as_slice()), Instructions(a.as_slice()), Instructions(b.as_slice()), Instructions(c.as_slice()));
-
                 let start = match main.iter().position(|x| match x { Action::Function(_) => false, _ => true }) {
                     Some(x) => x,
                     None => continue,
@@ -300,25 +297,15 @@ impl<'a> Instructions<'a> {
 
                 let end = main[start..].iter().position(|x| match x { Action::Function(_) => true, _ => false }).map(|x| start + x).unwrap_or(main.len());
 
-                let interesting_a = &[Action::TurnRight, Action::Move(8), Action::TurnRight, Action::Move(8)];
-                let interesting_b = &[Action::TurnRight, Action::Move(4), Action::TurnRight, Action::Move(4)];
-
-                let interesting = a.as_slice() == interesting_a && b.as_slice() == interesting_b;
-
                 for l in (2..=end - start).into_iter() {
                     let slice = &main[start..start + l];
-                    //println!("start = {}, l = {}, looking for {}", start, l, Instructions(slice));
-
                     let mut find_start = start;
-
                     let mut segments = Vec::new();
-                    //segments.push(find_start..find_start+l);
 
                     while find_start + l <= main.len() {
                         let haystack = &main[find_start..find_start + l];
                         assert_eq!(slice.len(), haystack.len());
                         if haystack == slice {
-                            //println!("found {} at {}", Instructions(slice), find_start);
                             segments.push(find_start..find_start + l);
                             find_start += l;
                         } else {
@@ -341,7 +328,6 @@ impl<'a> Instructions<'a> {
                         let mut i = 0;
                         let mut replacements = 0;
                         for segment in segments {
-                            //println!("segment: {:?}, i={}", segment, i);
                             while i < segment.start {
                                 new_main.push(main[i]);
                                 i += 1;
@@ -358,9 +344,6 @@ impl<'a> Instructions<'a> {
                         }
 
                         let repeated = main[start..start + l].to_vec();
-                        if interesting {
-                            //println!("copied\n{:>10}: {}\n{:>10}: {}\n{:>10}: {}", "old main", Instructions(main.as_slice()), "new main", Instructions(new_main.as_slice()), "repeated", Instructions(repeated.as_slice()));
-                        }
                         assert_eq!(new_main.len() + replacements * (repeated.len() - 1), main.len());
 
                         let (new_a, new_b, new_c) = match (&a[..], &b[..], &c[..]) {
@@ -375,17 +358,19 @@ impl<'a> Instructions<'a> {
                 }
             }
 
+            // this could be moved to work on a option as well...
             good.sort_by_key(|c| {
                 let total = (c.main.len() + c.a.len() + c.b.len() + c.c.len()) as isize;
                 let avg = total / 4;
 
+                // fit the example output to match...
                 (c.main.len() as isize - avg).pow(2)
                     + (c.a.len() as isize - avg).pow(2)
                     + (c.b.len() as isize - avg).pow(2)
                     + (c.c.len() as isize - avg).pow(2)
             });
 
-            //good.truncate(1);
+            good.truncate(1);
 
             let Compression { main, a, b, c } = good.remove(0);
 
@@ -778,9 +763,11 @@ fn part2_example() {
         }
     }
 
-    assert_eq!(shortest_travel(&gd, (1, 6), Direction::West).unwrap(), ((6, 6), 5));
+    assert_eq!(travel_straight(&gd, (1, 6), Direction::West).unwrap(), ((6, 6), 5));
 
-    let (main, a, b, c) = part2_program(&mut gd);
+    let actions = part2_find_path(&mut gd);
+
+    let (main, a, b, c) = Instructions(actions.as_slice()).compress();
 
     assert_eq!(format!("{}", Instructions(main.as_slice())).as_str(), "A,B,C,B,A,C");
     assert_eq!(format!("{}", Instructions(a.as_slice())).as_str(), "R,8,R,8");
