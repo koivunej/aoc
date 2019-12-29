@@ -40,19 +40,24 @@ fn part2_find_path(gd: &mut GameDisplay<Tile>) -> Vec<Action> {
         .count();
 
     let mut work = binary_heap_plus::BinaryHeap::new_by(
-        |a: &(_, _, _, _, HashSet<(Word, Word)>, _), b: &(_, _, _, _, HashSet<(Word, Word)>, _)| a.4.len().cmp(&b.4.len())
+        |a: &(_, _, _, _, HashSet<(Word, Word)>, _), b: &(_, _, _, _, HashSet<(Word, Word)>, _)| {
+            a.4.len().cmp(&b.4.len())
+        }
     );
 
     {
         let intersections = HashMap::new();
         let mut seen = HashSet::new();
         seen.insert(robot_initially_at);
-
         work.push((robot_initially_at, robot_initial_direction, Vec::new(), intersections, seen, 3));
     }
 
+    // current winning solution
     let mut smallest = None;
 
+    // so do a bfs and do pruning by not exploring the solutions which take longer than the first
+    // completed. this finds the same solutions as the "continue until corners". I was hoping the
+    // input to require coming back but the current frontier solution cannot find such.
     while let Some((pos, dir, actions_here, intersections, seen, gas)) = work.pop() {
         if seen.len() == visitable {
             smallest = match smallest.as_ref() {
@@ -104,6 +109,7 @@ fn part2_find_path(gd: &mut GameDisplay<Tile>) -> Vec<Action> {
             } else if gas > 0 {
                 gas - 1
             } else {
+                // this seems to prune most
                 continue;
             };
 
@@ -188,6 +194,7 @@ impl Iterator for FrontierDirections {
             0 => Some(self.0),
             1 => Some(self.0.to_left()),
             2 => Some(self.0.to_right()),
+            //3 => Some(self.0.reverse()),
             _ => None,
         };
 
