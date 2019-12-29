@@ -40,8 +40,13 @@ fn part2_find_path(gd: &mut GameDisplay<Tile>) -> Vec<Action> {
         .count();
 
     let mut work = binary_heap_plus::BinaryHeap::new_by(
-        |a: &(_, _, _, _, HashSet<(Word, Word)>, _), b: &(_, _, _, _, HashSet<(Word, Word)>, _)| {
-            a.4.len().cmp(&b.4.len())
+        |a: &(_, _, Vec<Action>, _, HashSet<(Word, Word)>, _), b: &(_, _, Vec<Action>, _, HashSet<(Word, Word)>, _)| {
+            use std::cmp::Ordering;
+
+            match a.4.len().cmp(&b.4.len()) {
+                Ordering::Equal => a.2.len().cmp(&b.2.len()).reverse(),
+                x => x
+            }
         }
     );
 
@@ -49,7 +54,7 @@ fn part2_find_path(gd: &mut GameDisplay<Tile>) -> Vec<Action> {
         let intersections = HashMap::new();
         let mut seen = HashSet::new();
         seen.insert(robot_initially_at);
-        work.push((robot_initially_at, robot_initial_direction, Vec::new(), intersections, seen, 3));
+        work.push((robot_initially_at, robot_initial_direction, Vec::new(), intersections, seen, 0));
     }
 
     // current winning solution
@@ -69,6 +74,7 @@ fn part2_find_path(gd: &mut GameDisplay<Tile>) -> Vec<Action> {
         }
 
         let seen_before = seen.len();
+        //println!("{}", visitable - seen_before);
 
         for (new_dir, mut new_pos) in frontier(gd, pos, dir) {
             let (final_pos, steps) = travel_straight(gd, new_pos, new_dir)
