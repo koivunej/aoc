@@ -32,12 +32,12 @@ fn part2_dust_collected(main: &[Action], a: &[Action], b: &[Action], c: &[Action
     data[0] = 2;
     let mut program = Program::from(intcode::Memory::from(data).with_memory_expansion());
     let mut regs = Some(Registers::default());
-    let input = format!("{}\n{}\n{}\n{}\ny\n", Instructions(main), Instructions(a), Instructions(b), Instructions(c));
+    let input = format!("{}\n{}\n{}\n{}\nn\n", Instructions(main), Instructions(a), Instructions(b), Instructions(c));
     let mut input = input.chars();
 
     loop {
         regs = Some(match program.eval_from_instruction(regs.take().unwrap()).unwrap() {
-            ExecutionState::HaltedAt(regs) => break,
+            ExecutionState::HaltedAt(_) => todo!("no dust value was received?"),
             ExecutionState::Paused(regs) => unreachable!("Paused? {:?}", regs),
             ExecutionState::InputIO(io) => {
                 let val: i64 = input.next().unwrap() as Word;
@@ -52,8 +52,6 @@ fn part2_dust_collected(main: &[Action], a: &[Action], b: &[Action], c: &[Action
             }
         });
     }
-
-    todo!("no dust value was received?")
 }
 
 fn part2_program(gd: &mut GameDisplay<Tile>) -> (Vec<Action>, Vec<Action>, Vec<Action>, Vec<Action>) {
@@ -238,12 +236,6 @@ impl<'a> Instructions<'a> {
             //.inspect(|x| println!("item: {:?}", x))
     }
 
-    fn str_len(&self) -> usize {
-        // all elements are single letter
-        let items = self.combine_consecutive().count();
-        2 * items - 1
-    }
-
     fn compress(&self) -> (Vec<Action>, Vec<Action>, Vec<Action>, Vec<Action>) {
         let limit = 20;
 
@@ -419,14 +411,6 @@ impl Coordinates for (Word, Word) {
 }
 
 impl Direction {
-    fn apply(&self, act: &Action) -> Direction {
-        match *act {
-            Action::TurnLeft => self.to_left(),
-            Action::TurnRight => self.to_right(),
-            _ => *self,
-        }
-    }
-
     fn orientation(&self) -> Orientation {
         use Direction::*;
         match *self {
@@ -526,15 +510,6 @@ enum Action {
     Function(char),
 }
 
-impl Action {
-    fn is_move(&self, n: usize) -> bool {
-        match *self {
-            Action::Move(m) if n == m => { true },
-            _ => false
-        }
-    }
-}
-
 fn alignment_parameters(gd: &GameDisplay<Tile>) -> i64 {
     let mut pos = (0, 0);
     loop {
@@ -602,13 +577,9 @@ impl ScaffoldProgram {
         let mut pos = (0, 0);
         loop {
             self.regs = Some(match self.program.eval_from_instruction(self.regs.take().unwrap()).unwrap() {
-                ExecutionState::HaltedAt(regs) => return gd,
+                ExecutionState::HaltedAt(_) => return gd,
                 ExecutionState::Paused(regs) => unreachable!("Paused? {:?}", regs),
-                ExecutionState::InputIO(io) => unreachable!("No input expected in print_map?"),
-                    /*
-                    let val: i64 = dir.into();
-                    self.program.handle_input_completion(io, val).unwrap()
-                    */
+                ExecutionState::InputIO(_io) => unreachable!("No input expected in print_map?"),
                 ExecutionState::OutputIO(io, value) => {
                     let value = value as u8;
                     if value == b'\n' {
@@ -690,14 +661,6 @@ impl Tile {
             _ => None,
         }
     }
-
-    fn is_robot(&self) -> bool {
-        if let &Tile::Robot(_) = self {
-            true
-        } else {
-            false
-        }
-    }
 }
 
 impl TryFrom<u8> for Tile {
@@ -711,7 +674,7 @@ impl TryFrom<u8> for Tile {
             b'>' => Tile::Robot(Direction::West),
             b'<' => Tile::Robot(Direction::East),
             b'v' => Tile::Robot(Direction::South),
-            x => return Err(ascii as char),
+            x => return Err(x as char),
         })
     }
 }
@@ -787,12 +750,6 @@ fn part2_example() {
     }
 
     assert_eq!(shortest_travel(&gd, (1, 6), Direction::West).unwrap(), ((6, 6), 5));
-
-    for (new_dir, new_pos) in frontier(&gd, (6, 6), Direction::West) {
-        for act in ActionsBetweenDirections::from((Direction::West, new_dir)) {
-            println!("turning from West to {:?}: {:?}", new_dir, act);
-        }
-    }
 
     let (main, a, b, c) = part2_program(&mut gd);
 
