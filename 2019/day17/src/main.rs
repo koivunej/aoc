@@ -25,8 +25,6 @@ fn main() {
 }
 
 fn part2_find_path(gd: &mut GameDisplay<Tile>) -> Vec<Action> {
-    println!("{}", gd);
-
     let robot_initially_at = gd.cells()
         .iter()
         .position(|t| if let &Tile::Robot(_) = t { true } else { false })
@@ -41,32 +39,35 @@ fn part2_find_path(gd: &mut GameDisplay<Tile>) -> Vec<Action> {
         .filter(|t| t.can_visit())
         .count();
 
-    let mut work = binary_heap_plus::BinaryHeap::new_by(|a: &(_, _, _, _, HashSet<(Word, Word)>, _), b: &(_, _, _, _, HashSet<(Word, Word)>, _)| a.4.len().cmp(&b.4.len()));
-    let intersections = HashMap::new();
-    let mut seen = HashSet::new();
-    seen.insert(robot_initially_at);
+    let mut work = binary_heap_plus::BinaryHeap::new_by(
+        |a: &(_, _, _, _, HashSet<(Word, Word)>, _), b: &(_, _, _, _, HashSet<(Word, Word)>, _)| a.4.len().cmp(&b.4.len())
+    );
 
-    work.push((robot_initially_at, robot_initial_direction, Vec::new(), intersections, seen, 3));
+    {
+        let intersections = HashMap::new();
+        let mut seen = HashSet::new();
+        seen.insert(robot_initially_at);
+
+        work.push((robot_initially_at, robot_initial_direction, Vec::new(), intersections, seen, 3));
+    }
 
     let mut smallest = None;
 
     while let Some((pos, dir, actions_here, intersections, seen, gas)) = work.pop() {
         if seen.len() == visitable {
-            smallest = match smallest.take() {
-                None => { println!("found first solution: {}", actions_here.len()); Some(actions_here) },
-                Some(other) if other.len() > actions_here.len() => { println!("found new best solution: {}", actions_here.len()); Some(actions_here) },
-                Some(other) => Some(other)
+            smallest = match smallest.as_ref() {
+                None => Some(actions_here),
+                Some(other) if other.len() > actions_here.len() => Some(actions_here),
+                Some(_) => continue,
             };
             continue;
         }
 
         let seen_before = seen.len();
 
-        for (new_dir, mut new_pos) in frontier(gd, pos, dir)/*.inspect(|x| println!("frontier(_, {:?}, {:?}): {:?}", pos, dir, x))*/ {
-            // this could probably be just consumed in a loop or folded to get count, the last step
-            // and so on.
-            // the steps +1 is because the frontier already took a step in the new_dir direction.
-            let (final_pos, steps) = shortest_travel(gd, new_pos, new_dir).expect("frontier point should be travellable");
+        for (new_dir, mut new_pos) in frontier(gd, pos, dir) {
+            let (final_pos, steps) = shortest_travel(gd, new_pos, new_dir)
+                .expect("frontier point should be travellable");
 
             let mut intersections = intersections.clone();
             let mut seen = seen.clone();
@@ -169,17 +170,29 @@ fn shortest_travel(gd: &GameDisplay<Tile>, pos: (Word, Word), dir: Direction) ->
         .last()
 }
 
-fn frontier<'a>(gd: &'a GameDisplay<Tile>, pos: (Word, Word), dir: Direction) -> impl Iterator<Item = (Direction, (Word, Word))> + 'a {
-    [Direction::North, Direction::West, Direction::South, Direction::East]
-        .into_iter()
-        //.filter(|d| dir != **d)
-        .map(move |dir| (*dir, pos.step(*dir)))
-        .filter_map(move |(dir, pos_after_turning)| gd.get(&pos_after_turning).map(|t| (dir, pos_after_turning, t)))
-        .filter_map(|(d, p, t)| match t {
-            Tile::Scaffolding | Tile::Robot(_) => Some((d, p)),
+fn frontier<'a>(gd: &'a GameDisplay<Tile>, p1: (Word, Word), dir: Direction) -> impl Iterator<Item = (Direction, (Word, Word))> + 'a {
+    FrontierDirections(dir, 0)
+        .map(move |dir| (dir, p1.step(dir)))
+        .filter_map(move |(dir, p2)| gd.get(&p2).map(|t| (dir, p2, t)))
+        .filter_map(|(d, p, t)| if t.can_visit() { Some((d, p)) } else { None })
+}
+
+struct FrontierDirections(Direction, u8);
+
+impl Iterator for FrontierDirections {
+    type Item = Direction;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ret = match self.1 {
+            0 => Some(self.0),
+            1 => Some(self.0.to_left()),
+            2 => Some(self.0.to_right()),
             _ => None,
-        })
-        .filter(move |(new_dir, _)| *new_dir != dir.reverse())
+        };
+
+        self.1 += 1;
+        ret
+    }
 }
 
 struct Instructions<'a>(&'a [Action]);
