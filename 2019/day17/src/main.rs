@@ -424,23 +424,6 @@ impl Coordinates for (Word, Word) {
     }
 }
 
-impl Direction {
-    fn orientation(&self) -> Orientation {
-        use Direction::*;
-        match *self {
-            North | South => Orientation::Vertical,
-            East | West => Orientation::Horizontal,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-enum Orientation {
-    Horizontal,
-    Vertical
-}
-
-
 struct ActionsBetweenDirections {
     from: Direction,
     to: Direction,
