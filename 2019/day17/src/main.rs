@@ -11,12 +11,6 @@ fn main() {
         println!("part1: {}", alignment_parameters(&gd));
     }
 
-    // for part2 probably:
-    //  1. from initial parsed state (direction, pos) generate the commands
-    //  2. go through the command list find the longest common substrings?
-    //      * could be that the "at least once" is bad here, may need to insert some bogus "go back
-    //      to here"
-
     let (main, a, b, c) = part2_program(&mut gd);
     println!("{:>8}: {}", "MAIN", Instructions(main.as_slice()));
     println!("{:>8}: {}", "A", Instructions(a.as_slice()));
@@ -25,33 +19,6 @@ fn main() {
     println!();
 
     println!("part2: {}", part2_dust_collected(main.as_slice(), a.as_slice(), b.as_slice(), c.as_slice(), input));
-}
-
-fn part2_dust_collected(main: &[Action], a: &[Action], b: &[Action], c: &[Action], mut data: Vec<Word>) -> Word {
-    assert_eq!(data[0], 1);
-    data[0] = 2;
-    let mut program = Program::from(intcode::Memory::from(data).with_memory_expansion());
-    let mut regs = Some(Registers::default());
-    let input = format!("{}\n{}\n{}\n{}\nn\n", Instructions(main), Instructions(a), Instructions(b), Instructions(c));
-    let mut input = input.chars();
-
-    loop {
-        regs = Some(match program.eval_from_instruction(regs.take().unwrap()).unwrap() {
-            ExecutionState::HaltedAt(_) => todo!("no dust value was received?"),
-            ExecutionState::Paused(regs) => unreachable!("Paused? {:?}", regs),
-            ExecutionState::InputIO(io) => {
-                let val: i64 = input.next().unwrap() as Word;
-                program.handle_input_completion(io, val).unwrap()
-            },
-            ExecutionState::OutputIO(io, value) => {
-                if value.abs() > 128 {
-                    return value;
-                }
-                print!("{}", value as u8 as char);
-                program.handle_output_completion(io)
-            }
-        });
-    }
 }
 
 fn part2_program(gd: &mut GameDisplay<Tile>) -> (Vec<Action>, Vec<Action>, Vec<Action>, Vec<Action>) {
@@ -147,6 +114,34 @@ fn part2_program(gd: &mut GameDisplay<Tile>) -> (Vec<Action>, Vec<Action>, Vec<A
         None => unreachable!("no solutions"),
     }
 }
+
+fn part2_dust_collected(main: &[Action], a: &[Action], b: &[Action], c: &[Action], mut data: Vec<Word>) -> Word {
+    assert_eq!(data[0], 1);
+    data[0] = 2;
+    let mut program = Program::from(intcode::Memory::from(data).with_memory_expansion());
+    let mut regs = Some(Registers::default());
+    let input = format!("{}\n{}\n{}\n{}\nn\n", Instructions(main), Instructions(a), Instructions(b), Instructions(c));
+    let mut input = input.chars();
+
+    loop {
+        regs = Some(match program.eval_from_instruction(regs.take().unwrap()).unwrap() {
+            ExecutionState::HaltedAt(_) => todo!("no dust value was received?"),
+            ExecutionState::Paused(regs) => unreachable!("Paused? {:?}", regs),
+            ExecutionState::InputIO(io) => {
+                let val: i64 = input.next().unwrap() as Word;
+                program.handle_input_completion(io, val).unwrap()
+            },
+            ExecutionState::OutputIO(io, value) => {
+                if value.abs() > 128 {
+                    return value;
+                }
+                print!("{}", value as u8 as char);
+                program.handle_output_completion(io)
+            }
+        });
+    }
+}
+
 
 fn shortest_travel(gd: &GameDisplay<Tile>, pos: (Word, Word), dir: Direction) -> Option<((Word, Word), usize)> {
     (1..)
