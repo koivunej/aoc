@@ -11,7 +11,10 @@ fn main() {
         println!("part1: {}", alignment_parameters(&gd));
     }
 
-    let (main, a, b, c) = part2_program(&mut gd);
+    let actions = part2_find_path(&mut gd);
+    println!("{:>8}: {}", "raw", Instructions(actions.as_slice()));
+
+    let (main, a, b, c) = Instructions(actions.as_slice()).compress();
     println!("{:>8}: {}", "MAIN", Instructions(main.as_slice()));
     println!("{:>8}: {}", "A", Instructions(a.as_slice()));
     println!("{:>8}: {}", "B", Instructions(b.as_slice()));
@@ -21,7 +24,7 @@ fn main() {
     println!("part2: {}", part2_dust_collected(main.as_slice(), a.as_slice(), b.as_slice(), c.as_slice(), input));
 }
 
-fn part2_program(gd: &mut GameDisplay<Tile>) -> (Vec<Action>, Vec<Action>, Vec<Action>, Vec<Action>) {
+fn part2_find_path(gd: &mut GameDisplay<Tile>) -> Vec<Action> {
     println!("{}", gd);
 
     let robot_initially_at = gd.cells()
@@ -30,7 +33,8 @@ fn part2_program(gd: &mut GameDisplay<Tile>) -> (Vec<Action>, Vec<Action>, Vec<A
         .map(|index| gd.to_coordinates(index))
         .unwrap();
 
-    let robot_initial_direction = gd.get(&robot_initially_at).and_then(Tile::robot_direction).unwrap();
+    let robot_initial_direction = gd.get(&robot_initially_at)
+        .and_then(Tile::robot_direction).unwrap();
 
     let visitable = gd.cells()
         .iter()
@@ -81,7 +85,7 @@ fn part2_program(gd: &mut GameDisplay<Tile>) -> (Vec<Action>, Vec<Action>, Vec<A
                 match intersections.entry((new_pos, (dir, new_dir))) {
                     Entry::Occupied(mut oc) => {
                         if *oc.get() > 2 {
-                            println!("filtering: path visited {:?} in {:?} more than {} times, visited {}", new_pos, new_dir.orientation(), *oc.get(), seen.len());
+                            // this is no longer hit?
                             continue;
                         }
                         *oc.get_mut() += 1;
@@ -102,15 +106,17 @@ fn part2_program(gd: &mut GameDisplay<Tile>) -> (Vec<Action>, Vec<Action>, Vec<A
                 continue;
             };
 
+            match smallest.as_ref() {
+                Some(x) if x.len() < actions.len() => continue,
+                Some(_) | None => {}
+            }
+
             work.push((new_pos, new_dir, actions, intersections, seen, gas));
         }
     }
 
     match smallest {
-        Some(x) => {
-            let instructions = Instructions(x.as_slice());
-            instructions.compress()
-        },
+        Some(instructions) => instructions,
         None => unreachable!("no solutions"),
     }
 }
@@ -128,8 +134,9 @@ fn part2_dust_collected(main: &[Action], a: &[Action], b: &[Action], c: &[Action
             ExecutionState::HaltedAt(_) => todo!("no dust value was received?"),
             ExecutionState::Paused(regs) => unreachable!("Paused? {:?}", regs),
             ExecutionState::InputIO(io) => {
-                let val: i64 = input.next().unwrap() as Word;
-                program.handle_input_completion(io, val).unwrap()
+                let ch = input.next().unwrap();
+                print!("{}", ch);
+                program.handle_input_completion(io, ch as Word).unwrap()
             },
             ExecutionState::OutputIO(io, value) => {
                 if value.abs() > 128 {
