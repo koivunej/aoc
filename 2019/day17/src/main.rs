@@ -66,7 +66,7 @@ fn part2_find_path(gd: &mut GameDisplay<Tile>) -> Vec<Action> {
         let seen_before = seen.len();
 
         for (new_dir, mut new_pos) in frontier(gd, pos, dir) {
-            let (final_pos, steps) = shortest_travel(gd, new_pos, new_dir)
+            let (final_pos, steps) = travel_straight(gd, new_pos, new_dir)
                 .expect("frontier point should be travellable");
 
             let mut intersections = intersections.clone();
@@ -150,8 +150,10 @@ fn part2_dust_collected(main: &[Action], a: &[Action], b: &[Action], c: &[Action
     }
 }
 
-
-fn shortest_travel(gd: &GameDisplay<Tile>, pos: (Word, Word), dir: Direction) -> Option<((Word, Word), usize)> {
+/// Travels from the given position to the given direction as long as possible returning the final
+/// position and the steps taken. As long as possible means until path ends or arrive at
+/// intersection.
+fn travel_straight(gd: &GameDisplay<Tile>, pos: (Word, Word), dir: Direction) -> Option<((Word, Word), usize)> {
     (1..)
         .map(|steps| (dir, steps))
         .scan(pos, |acc, (d, steps)| {
@@ -166,7 +168,6 @@ fn shortest_travel(gd: &GameDisplay<Tile>, pos: (Word, Word), dir: Direction) ->
                 }
             }
         })
-        //.inspect(|x| println!("shortest_travel: {:?}", x))
         .last()
 }
 
