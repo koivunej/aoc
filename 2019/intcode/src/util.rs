@@ -86,6 +86,7 @@ pub fn with_parsed_program<V, F>(f: F) -> V
 
 mod gamedisplay {
     use crate::Word;
+    use std::convert::TryFrom;
     use std::fmt;
 
     /// Does not really belong to `intcode` but useful for maps and displays.
@@ -165,7 +166,7 @@ mod gamedisplay {
         pub fn to_coordinates(&self, index: usize) -> (Word, Word) {
             let x = index % self.width;
             let y = index / self.width;
-            assert!(y < self.width);
+            assert!(y < self.height);
             (x as Word, y as Word)
         }
 
@@ -218,6 +219,26 @@ mod gamedisplay {
         }
     }
 
+
+    impl<T: TryFrom<char> + Default + Clone> GameDisplay<T> {
+        pub fn parse_grid_lines(&mut self, line: &str, start_pos: (Word, Word)) -> Result<(Word, Word), <T as TryFrom<char>>::Error>  {
+            let mut pos = start_pos;
+            for ch in line.chars() {
+                if ch == '\n' {
+                    pos.0 = 0;
+                    pos.1 += 1;
+                    continue;
+                }
+
+                let item = T::try_from(ch)?;
+
+                self.insert(&pos, item);
+                pos.0 += 1;
+            }
+            Ok(pos)
+        }
+    }
+
     #[derive(Debug, PartialEq, Eq)]
     enum Direction { Width, Height }
 
@@ -229,8 +250,6 @@ mod gamedisplay {
 
     impl Growth {
         fn from_setup((w, h): (usize, usize), (minx, miny): (Word, Word), (x, y): (Word, Word)) -> Option<Growth> {
-            use std::convert::TryFrom;
-
             let w = w as Word;
             let h = h as Word;
 
@@ -524,3 +543,121 @@ mod gamedisplay {
 }
 
 pub use gamedisplay::GameDisplay;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Direction {
+    // position grows
+    Up,
+    // position grows
+    Right,
+    Down,
+    Left,
+}
+
+impl Direction {
+    pub fn turn_left(&self) -> Self {
+        use Direction::*;
+
+        match *self {
+            Up => Left,
+            Right => Up,
+            Down => Right,
+            Left => Down,
+        }
+    }
+
+    pub fn turn_right(&self) -> Self {
+        use Direction::*;
+
+        match *self {
+            Up => Right,
+            Right => Down,
+            Down => Left,
+            Left => Up,
+        }
+    }
+}
+
+impl Into<Position> for &Direction {
+    fn into(self) -> Position {
+        use Direction::*;
+
+        let tuple = match *self {
+            Up => (0, -1),
+            Right => (1, 0),
+            Down => (0, 1),
+            Left => (-1, 0),
+        };
+
+        tuple.into()
+    }
+}
+
+impl Into<Position> for Direction {
+    fn into(self) -> Position {
+        (&self).into()
+    }
+}
+
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Position(Word, Word);
+
+impl Position {
+    pub fn x(&self) -> Word {
+        self.0
+    }
+
+    pub fn y(&self) -> Word {
+        self.1
+    }
+}
+
+impl<T: Into<Position>> std::ops::Add<T> for Position {
+    type Output = Position;
+
+    fn add(self, rhs: T) -> Self::Output {
+        let rhs = rhs.into();
+        Position(self.0 + rhs.0, self.1 + rhs.1)
+    }
+}
+
+impl std::ops::Mul<i64> for Position {
+    type Output = Position;
+
+    fn mul(self, rhs: i64) -> Self::Output {
+        Position(self.0 * rhs, self.1 * rhs)
+    }
+}
+
+impl<T: Into<Position>> std::ops::Sub<T> for Position {
+    type Output = Position;
+
+    fn sub(self, rhs: T) -> Self::Output {
+        let rhs = rhs.into() * -1;
+        self + rhs
+    }
+}
+
+impl Into<(Word, Word)> for &Position {
+    fn into(self) -> (Word, Word) {
+        (self.0, self.1)
+    }
+}
+
+impl Into<(Word, Word)> for Position {
+    fn into(self) -> (Word, Word) {
+        (&self).into()
+    }
+}
+
+impl From<&(Word, Word)> for Position {
+    fn from(tuple: &(Word, Word)) -> Position {
+        Position(tuple.0, tuple.1)
+    }
+}
+
+impl From<(Word, Word)> for Position {
+    fn from(tuple: (Word, Word)) -> Self {
+        (&tuple).into()
+    }
+}

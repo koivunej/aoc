@@ -159,6 +159,10 @@ impl<'a> Program<'a> {
         Program { mem: Memory::from(mem) }
     }
 
+    pub fn unwrap(self) -> Memory<'a> {
+        self.mem
+    }
+
     /// Returns Ok(instruction_pointer) for the halt instruction
     pub fn wrap_and_eval(data: &mut [Word]) -> Result<usize, InvalidProgram> {
         Self::wrap_and_eval_with_env(data, &mut Environment::default())

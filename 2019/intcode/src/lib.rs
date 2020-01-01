@@ -103,6 +103,7 @@ impl<'a> RawMemory<'a> {
 pub struct Memory<'a> {
     mem: RawMemory<'a>,
     expansion: Option<Vec<Word>>, // None if expanded memory is not supported
+    dirty: bool,
 }
 
 impl<'a> From<&'a mut [Word]> for Memory<'a> {
@@ -110,6 +111,7 @@ impl<'a> From<&'a mut [Word]> for Memory<'a> {
         Memory {
             mem: RawMemory::from(mem),
             expansion: None,
+            dirty: false,
         }
     }
 }
@@ -119,6 +121,7 @@ impl<'a> From<&'a [Word]> for Memory<'static> {
         Memory {
             mem: RawMemory::Owned(mem.to_vec()),
             expansion: None,
+            dirty: false,
         }
     }
 }
@@ -128,6 +131,7 @@ impl From<Vec<Word>> for Memory<'static> {
         Memory {
             mem: RawMemory::Owned(mem),
             expansion: None,
+            dirty: false,
         }
     }
 }
@@ -147,6 +151,7 @@ impl<'a> Memory<'a> {
     }
 
     fn write(&mut self, addr: usize, value: Word) -> Result<(), BadWrite> {
+        self.dirty = true;
         if addr < self.mem.len() {
             let cell = self.mem.get_mut(addr).ok_or(BadWrite::AddressOutOfBounds(addr))?;
             *cell = value;
@@ -177,6 +182,7 @@ impl<'a> Memory<'a> {
         Memory {
             mem: self.mem.into_owned(),
             expansion: self.expansion,
+            dirty: self.dirty,
         }
     }
 
@@ -184,6 +190,42 @@ impl<'a> Memory<'a> {
         assert!(self.expansion.is_none());
         self.expansion = Some(Vec::new());
         self
+    }
+
+    pub fn with_expanded_memory(self, expansion: Option<Vec<Word>>) -> Self {
+        assert!(self.expansion.is_none());
+        Memory {
+            mem: self.mem,
+            expansion,
+            dirty: self.dirty,
+        }
+    }
+
+    pub fn unwrap(self) -> (Option<Vec<Word>>, Option<Vec<Word>>) {
+        let Self { mem, expansion, .. } = self;
+
+        match mem {
+            RawMemory::Owned(x) => (Some(x), expansion),
+            RawMemory::Borrowed(_) => (None, expansion),
+        }
+    }
+
+    pub fn reset_from(&mut self, initial: &[Word]) {
+        match self.mem {
+            RawMemory::Owned(ref mut x) => {
+                assert_eq!(x.len(), initial.len());
+                x.clear();
+                x.extend(initial);
+            },
+            RawMemory::Borrowed(ref mut x) => {
+                assert_eq!(x.len(), initial.len());
+                x.copy_from_slice(initial);
+            },
+        }
+
+        if let Some(v) = self.expansion.as_mut() {
+            v.clear();
+        }
     }
 }
 
