@@ -36,4 +36,19 @@ Day13: Peak complexity "game display" (adaptive 2d board)
 
 Day14: Lot of simple mistakes which took a huge amount to fix
 
-Day16: Now I know prefix sum
+Day15: Can't remember having much of a problem with this one, did it after 18
+and 17 and that's probably the reason. Maybe had to do some game display fixes
+here as well.
+
+Day16: Now I know prefix sum.
+
+Day17: Non-caching dijkstra, exponential time compression?
+
+Day18: Did this before day18. If another way around, maybe I would've used the
+dijkstra here which seems to have been the optimal. Used custom floyd-warshall
+without being able to filter the vertices so this takes a while.
+
+Day19: `trait`s for testability. Wasted a lot of time by not starting from the
+part2 example.
+
+Day24: Can't remember anything special, but had a lot of time getting part2 working.
