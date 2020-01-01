@@ -7,17 +7,22 @@ fn main() {
     let mut drones = DroneDeployer::new(program.as_slice());
     let p1_queries = {
         let mut p1 = PartWrapper { inner: &mut drones, queries: 0 };
-        println!("part1: {}", part1(&mut p1, (50, 50)));
+        let answer = part1(&mut p1, (50, 50));
+        assert_eq!(answer, 112);
+        println!("part1: {}", answer);
         p1.into_statistics()
     };
 
     let p2_queries = {
         let mut p2 = PartWrapper { inner: &mut drones, queries: 0 };
-        println!("part2: {}", part2(&mut p2, 100));
+        let answer = part2(&mut p2, 100);
+        assert_eq!(answer, 18261982);
+        println!("part2: {}", answer);
         p2.into_statistics()
     };
 
-    // this was 112 and 11599 upon submission without recheck and diagnostics
+    // this was 605 and 11599 upon submission without recheck and diagnostics
+    // after removing the nasty costly error with using my own search incorrectly: 605, 9716
     println!("queries: {:?}", (p1_queries, p2_queries));
 }
 
@@ -221,6 +226,8 @@ fn part2<Q: Queryable>(queryable: &mut Q, square: i64) -> i64 {
             }
         } else {
             // first calculate the corner, but do not check it yet
+            // of course I initially had a `pos - (square, 0)` here for some good off by one time
+            // wasted.
             let mut corner = pos + (1 - square, 0);
 
             // then take a guess at the left bottom, which is just `pos + (1 - square, square - 1)`
@@ -231,7 +238,7 @@ fn part2<Q: Queryable>(queryable: &mut Q, square: i64) -> i64 {
             // the guess... my longest standing issue was in fact when using this search which I
             // had forgotten returns None if there is no better position, instead of returning the
             // search start point, the second argument.
-            let left_bottom = search(queryable, left_bottom_guess, (-1, 0)).unwrap_or(left_bottom_guess);
+            let left_bottom = left_bottom_guess;
             assert_eq!(left_bottom, left_bottom_guess);
 
             if diagnostics {
@@ -251,15 +258,7 @@ fn part2<Q: Queryable>(queryable: &mut Q, square: i64) -> i64 {
                 if diagnostics {
                     gd.insert(&left_bottom.into(), DiagnosticTile::Interesting('B'));
                 }
-                let first_corner = corner;
                 corner = left_bottom + (0, -square + 1);
-
-                println!("started with from {:?}, corner = {:?}, went to {:?}, searched left until {:?}, corner = {:?}",
-                    pos,
-                    first_corner,
-                    left_bottom_guess,
-                    left_bottom,
-                    corner);
 
                 let recheck = square < 100;
 
