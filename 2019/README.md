@@ -51,4 +51,12 @@ without being able to filter the vertices so this takes a while.
 Day19: `trait`s for testability. Wasted a lot of time by not starting from the
 part2 example.
 
+Day20: These recursive things are nice, especially when I realized how to model the levels.
+
+Day21: First thought about enumerating all of the solutions, then remembered
+genetic algorithms. Failed to get my mixing working (as always), finally found
+someone elses GA solution, picked the testcase examples for faster testing and
+got the hull damage. The other solution did not use any mixing but only
+mutations which works nicely.
+
 Day24: Can't remember anything special, but had a lot of time getting part2 working.
