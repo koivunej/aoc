@@ -38,6 +38,8 @@ fn random_stage<T>(data: &[Word]) -> Word
     let mut min_score = 1000;
     let mut max_score = 0;
     let mut round = 0;
+    let mut prev_max_score = 0;
+    let mut stale_rounds = 0;
 
     loop {
         let mut round_min = 10000;
@@ -53,7 +55,7 @@ fn random_stage<T>(data: &[Word]) -> Word
             let program = rng.gen::<SpringScript<T>>();
 
             match score(&testcases, data, program.0.as_slice(), &mut script_buffer, &mut output_buffer) {
-                Ok(x) => return x,
+                Ok(x) => { println!("found on RANDOM on round {}", round); return x; },
                 Err((testcase, score)) => {
                     if let Some(testcase) = testcase {
                         testcases.push(testcase);
@@ -86,7 +88,7 @@ fn random_stage<T>(data: &[Word]) -> Word
                 cloned.mutate_one(&mut rng);
 
                 match score(&testcases, data, cloned.as_slice(), &mut script_buffer, &mut output_buffer) {
-                    Ok(x) => return x,
+                    Ok(x) => { println!("found on round {}", round); return x; },
                     Err((testcase, score)) => {
                         if let Some(testcase) = testcase {
                             testcases.push(testcase);
@@ -109,7 +111,7 @@ fn random_stage<T>(data: &[Word]) -> Word
                 cloned.mutate_size(&mut rng);
 
                 match score(&testcases, data, cloned.as_slice(), &mut script_buffer, &mut output_buffer) {
-                    Ok(x) => return x,
+                    Ok(x) => { println!("found on round {}", round); return x; },
                     Err((testcase, score)) => {
                         if let Some(testcase) = testcase {
                             testcases.push(testcase);
@@ -127,79 +129,24 @@ fn random_stage<T>(data: &[Word]) -> Word
             }
         }
 
-        // so maybe breeding/mixing is not so hot after all
-        /*'out: for i in 0..remaining {
-            for j in 0..remaining {
-                if i == j {
-                    //continue;
-                }
-                if population.len() > 90 {
-                    break 'out;
-                }
+        // mixing impl was tested up to 10000 rounds with no avail with length mixing, mutation
+        // 0.15 and mixing of two... no luck. IDEA: try windowed mixing of 4 maybe?
+        //
+        // simply mutating gets the job done in ~200..50000 rounds, almost all best solutions come from
+        // mutation. thanks birkenfeld.
+        if prev_max_score != max_score {
+            println!("{:<8}: min: {:>3}|{:>3}|{:<3} max: {:>3}|{:>3}|{:<3} random: {:<3} mixed: {:<3}", round, min_score, round_min, mix_min, max_score, round_max, mix_max, random, mixed);
+            prev_max_score = max_score;
+        } else {
+            stale_rounds += 1;
 
-                let first = &population[i].0;
-                let second = &population[j].0;
-
-                let mut cloned = SpringScript::clone([first, second].iter().max_by_key(|x| x.len()).unwrap());
-
-                let smaller = [first, second].iter().min_by_key(|x| x.len()).copied().unwrap();
-
-                if first.len() != second.len() {
-                    let min = first.len().min(second.len());
-                    let max = first.len().max(second.len());
-
-                    let new_len = rng.gen_range(min, max + 1);
-                    cloned.truncate(new_len);
-                }
-
-                if i != j {
-                    for k in 0..smaller.len() {
-                        if rng.gen_bool(0.5) {
-                            cloned[k] = smaller[k].clone();
-                        }
-                    }
-                }
-
-                if rng.gen_bool(0.15) {
-                    cloned.mutate_one(&mut rng);
-                }
-
-                if rng.gen_bool(0.15) {
-                    cloned.mutate_size(&mut rng);
-                }
-
-                match test(data, cloned.as_slice(), &mut script_buffer, &mut output_buffer) {
-                    Some(x) => return x,
-                    None => {
-                        let score = output_buffer.trim().lines().last().unwrap()
-                            .chars()
-                            .filter(|ch| *ch != '#')
-                            .count();
-
-                        if score <= max_score - 1 {
-                            continue;
-                        }
-
-                        min_score = min_score.min(score);
-                        max_score = max_score.max(score);
-
-                        mix_min = mix_min.min(score);
-                        mix_max = mix_max.max(score);
-
-                        mixed += 1;
-
-                        population.push((cloned, score));
-                    },
-                }
+            if stale_rounds > 100 {
+                // this will cut down the time wasted significantly
+                // 10 is too slow and might not give a result
+                population.truncate(2);
+                stale_rounds = 0;
             }
         }
-        */
-
-        // this was tested up to 10000 rounds with no avail with length mixing, mutation 0.15 and
-        // mixing of two...
-        //
-        // try windowed mixing of 4 maybe?
-        println!("{:<8}: min: {:>3}|{:>3}|{:<3} max: {:>3}|{:>3}|{:<3} random: {:<3} mixed: {:<3}", round, min_score, round_min, mix_min, max_score, round_max, mix_max, random, mixed);
         round += 1;
     }
 }
