@@ -88,6 +88,7 @@ mod gamedisplay {
     use crate::Word;
     use std::convert::TryFrom;
     use std::fmt;
+    use std::io::BufRead;
 
     /// Does not really belong to `intcode` but useful for maps and displays.
     #[derive(Default)]
@@ -122,6 +123,25 @@ mod gamedisplay {
         }
     }
 
+    impl<T: fmt::Display + Default> fmt::Debug for GameDisplay<T> {
+        fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+
+            writeln!(fmt, "{}", self)?;
+
+            if !self.cells.is_empty() {
+                writeln!(
+                    fmt,
+                    "{}x{}, left_upper = {:?}, right_bottom = {:?}",
+                    self.width(),
+                    self.height(),
+                    self.smallest_coordinates,
+                    self.to_coordinates(self.cells.len() - 1))?;
+            }
+
+            Ok(())
+        }
+    }
+
     impl<T> GameDisplay<T> {
         pub fn to_index(&self, p: &(Word, Word)) -> Option<usize> {
             let (x, y) = *p;
@@ -144,12 +164,12 @@ mod gamedisplay {
             }
         }
 
-        fn width(&self) -> usize {
+        pub fn width(&self) -> usize {
             self.width
         }
 
         #[allow(dead_code)]
-        fn height(&self) -> usize {
+        pub fn height(&self) -> usize {
             self.height
         }
 
@@ -219,9 +239,26 @@ mod gamedisplay {
         }
     }
 
+    #[derive(Debug)]
+    pub enum Either<A, B> {
+        Left(A),
+        Right(B),
+    }
+
+    impl<A, B> Either<A, B> {
+        fn from_left(a: A) -> Self {
+            Either::Left(a)
+        }
+
+        fn from_right(b: B) -> Self {
+            Either::Right(b)
+        }
+    }
 
     impl<T: TryFrom<char> + Default + Clone> GameDisplay<T> {
-        pub fn parse_grid_lines(&mut self, line: &str, start_pos: (Word, Word)) -> Result<(Word, Word), <T as TryFrom<char>>::Error>  {
+        pub fn parse_grid_lines(&mut self, line: &str, start_pos: (Word, Word))
+            -> Result<(Word, Word), <T as TryFrom<char>>::Error>
+        {
             let mut pos = start_pos;
             for ch in line.chars() {
                 if ch == '\n' {
@@ -235,6 +272,25 @@ mod gamedisplay {
                 self.insert(&pos, item);
                 pos.0 += 1;
             }
+            Ok(pos)
+        }
+
+        pub fn parse_from_reader<R: BufRead>(&mut self, start_pos: (Word, Word), mut reader: R)
+            -> Result<(Word, Word), Either<<T as TryFrom<char>>::Error, std::io::Error>>
+        {
+            let mut pos = start_pos;
+            let mut buf = String::new();
+            loop {
+                buf.clear();
+                match reader.read_line(&mut buf).map_err(Either::from_right)? {
+                    0 => break,
+                    _ => {},
+                }
+
+                pos = self.parse_grid_lines(buf.as_str(), pos)
+                    .map_err(Either::from_left)?;
+            }
+
             Ok(pos)
         }
     }
