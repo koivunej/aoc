@@ -243,7 +243,7 @@ impl<'a> std::ops::Index<usize> for Memory<'a> {
     }
 }
 
-trait IO {
+pub trait IO {
     fn input(&mut self) -> Result<Word, ProgramError>;
     fn output(&mut self, value: Word) -> Result<(), ProgramError>;
 }

@@ -46,8 +46,11 @@ impl std::default::Default for ExecutionState {
     }
 }
 
-impl<'a> From<Memory<'a>> for Program<'a> {
-    fn from(mem: Memory<'a>) -> Self {
+impl<'a, T> From<T> for Program<'a>
+    where Memory<'a>: From<T>
+{
+    fn from(convertable: T) -> Self {
+        let mem = Memory::from(convertable);
         Program {
             mem
         }
@@ -55,6 +58,9 @@ impl<'a> From<Memory<'a>> for Program<'a> {
 }
 
 impl<'a> Program<'a> {
+    pub fn reset_from(&mut self, initial: &[Word]) {
+        self.mem.reset_from(initial);
+    }
 
     fn exec(&mut self, regs: Registers, op: Operation) -> Result<State, ProgramError> {
         let (code, pvs) = op.unpack();
@@ -178,7 +184,7 @@ impl<'a> Program<'a> {
         p.eval_with_env(env)
     }
 
-    pub fn eval_with_env(&mut self, env: &mut Environment) -> Result<usize, InvalidProgram> {
+    pub fn eval_with_env<E: IO>(&mut self, env: &mut E) -> Result<usize, InvalidProgram> {
         // I feel like this could be an instance property but it does not necessarily need to be?
         let mut regs = Registers::default();
         loop {
