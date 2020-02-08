@@ -30,11 +30,6 @@ fn part2(freqs: &[i64]) -> Option<i64> {
     None
 }
 
-#[test]
-fn scan_works_as_expected() {
-    assert_eq!(part2(&[1i64, -2, 3, 1]), Some(2));
-}
-
 fn parse_from_stdin() -> Result<Vec<i64>, std::io::Error> {
     use std::io::BufRead;
 
@@ -61,4 +56,9 @@ fn parse_from_stdin() -> Result<Vec<i64>, std::io::Error> {
     }
 
     Ok(vec)
+}
+
+#[test]
+fn scan_works_as_expected() {
+    assert_eq!(part2(&[1i64, -2, 3, 1]), Some(2));
 }
