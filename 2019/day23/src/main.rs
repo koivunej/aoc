@@ -22,7 +22,7 @@ fn main() {
 
     println!("part1: {:?}", part1);
 
-    let first_duplicate_y_sent_to_zero = zero_rx.first_duplicate();
+    let first_duplicate_y_sent_to_zero = zero_rx.into_iter().first_duplicate();
 
     println!("part2: {:?}", first_duplicate_y_sent_to_zero);
 
@@ -34,7 +34,7 @@ trait FirstDuplicateExt<Item> {
     fn first_duplicate(self) -> Option<Item>;
 }
 
-impl<Item: std::hash::Hash + Eq + Clone, Iter: IntoIterator<Item = Item>> FirstDuplicateExt<Item> for Iter {
+impl<Item: std::hash::Hash + Eq + Clone, Iter: Iterator<Item = Item>> FirstDuplicateExt<Item> for Iter {
     fn first_duplicate(self) -> Option<Item> {
         let mut seen = HashSet::new();
 
