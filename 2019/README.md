@@ -60,3 +60,10 @@ got the hull damage. The other solution did not use any mixing but only
 mutations which works nicely.
 
 Day24: Can't remember anything special, but had a lot of time getting part2 working.
+
+Day25: Probably the ugliest solution yet, and definitely stopped writing these
+notes down when I just got it to panic with the answer.
+
+Already started 2018 with more sensible organization of files, all days under
+`src/bin` so that the top level library crate can be used for common stuff like
+`Direction` which I implemented ... way too many times.
