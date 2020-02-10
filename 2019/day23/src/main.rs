@@ -22,20 +22,30 @@ fn main() {
 
     println!("part1: {:?}", part1);
 
-    let mut first_duplicate_y_sent_to_zero = None;
-
-    let mut seen_ys = HashSet::new();
-    for y in zero_rx {
-        if !seen_ys.insert(y) {
-            first_duplicate_y_sent_to_zero = Some(y);
-            break;
-        }
-    }
+    let first_duplicate_y_sent_to_zero = zero_rx.first_duplicate();
 
     println!("part2: {:?}", first_duplicate_y_sent_to_zero);
 
     assert_eq!(part1, (5471, 17714));
     assert_eq!(first_duplicate_y_sent_to_zero, Some(10982));
+}
+
+trait FirstDuplicateExt<Item> {
+    fn first_duplicate(self) -> Option<Item>;
+}
+
+impl<Item: std::hash::Hash + Eq + Clone, Iter: IntoIterator<Item = Item>> FirstDuplicateExt<Item> for Iter {
+    fn first_duplicate(self) -> Option<Item> {
+        let mut seen = HashSet::new();
+
+        for item in self {
+            if !seen.insert(item.clone()) {
+                return Some(item);
+            }
+        }
+
+        None
+    }
 }
 
 trait Bus {
