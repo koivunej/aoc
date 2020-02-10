@@ -59,6 +59,12 @@ someone elses GA solution, picked the testcase examples for faster testing and
 got the hull damage. The other solution did not use any mixing but only
 mutations which works nicely.
 
+Somewhere between (day22) here I needed help and luckily someone had made a
+writeup of the linear math required in the task but couldn't implement it
+without pre-existing solutions from reddit. Not feeling really bad about that
+as the math was all new for me, and I got somehow in the right direction
+without help. Sadly I didn't link the blog post to the code?
+
 Day24: Can't remember anything special, but had a lot of time getting part2 working.
 
 Day25: Probably the ugliest solution yet, and definitely stopped writing these
