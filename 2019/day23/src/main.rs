@@ -51,7 +51,7 @@ struct SlowBusInner {
 }
 
 impl SlowBusInner {
-    fn send(&mut self, src: Word, dest: Word, x: Word, y: Word) {
+    fn send(&mut self, _: Word, dest: Word, x: Word, y: Word) {
         if dest == 255 {
             self.last_nat = Some((x, y));
         } else {
@@ -65,7 +65,7 @@ impl SlowBusInner {
         let ret = self.buffers.get_mut(addr).and_then(|buffer| buffer.pop_front());
 
         if ret.is_none() {
-            self.idle |= (1 << *addr as u64);
+            self.idle |= 1 << *addr as u64;
         } else {
             self.idle &= !(1 << *addr as u64);
         }
