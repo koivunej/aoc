@@ -1,19 +1,11 @@
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 struct Point(i64, i64);
 
-impl std::ops::Add<&Point> for &Point {
-    type Output = Point;
-
-    fn add(self, other: &Point) -> Self::Output {
-        Point(self.0 + other.0, self.1 + other.1)
-    }
-}
-
 impl std::ops::Add for Point {
     type Output = Point;
 
     fn add(self, other: Self) -> Self::Output {
-        &self + &other
+        Point(self.0 + other.0, self.1 + other.1)
     }
 }
 
@@ -53,7 +45,7 @@ fn main() {
 
     println!("part1: {}", part1);
 
-    assert_eq!(part1, 111485);
+    assert_eq!(part1, 111_485);
 }
 
 fn parse_claim(s: &str) -> (usize, Point, (u64, u64)) {
