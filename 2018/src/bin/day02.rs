@@ -25,7 +25,7 @@ fn part1<S: AsRef<str>>(ss: &[S]) -> i64 {
         let mut char_counts = [0i64; 30];
 
         for ch in serial.as_ref().chars() {
-            char_counts[(ch as u8 - 'a' as u8) as usize] += 1;
+            char_counts[(ch as u8 - b'a') as usize] += 1;
         }
 
         let mut visited = [false; 2];
@@ -48,15 +48,15 @@ fn part1<S: AsRef<str>>(ss: &[S]) -> i64 {
 }
 
 fn part2<S: AsRef<str>>(ss: &[S]) -> String {
-    for y in 0..ss.len() {
-        let left = ss[y].as_ref();
+    for (y, left) in ss.iter().enumerate() {
+        let left = left.as_ref();
 
-        for x in 0..ss.len() {
+        for (x, right) in ss.iter().enumerate() {
             if x == y {
                 continue;
             }
 
-            let right = ss[x].as_ref();
+            let right = right.as_ref();
             assert_eq!(left.len(), right.len());
 
             let mut differences = left
@@ -69,17 +69,15 @@ fn part2<S: AsRef<str>>(ss: &[S]) -> String {
             let first = differences.next();
 
             if let Some(i) = first {
-                if let None = differences.next() {
+                if differences.next().is_none() {
                     let mut ret = String::new();
                     ret.push_str(&left[..i]);
                     ret.push_str(&left[i + 1..]);
                     return ret;
-                } else {
-                    continue;
                 }
-            } else {
-                continue;
             }
+
+            continue;
         }
     }
 
