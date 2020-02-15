@@ -15,9 +15,7 @@ fn parse_serial_from_stdin() -> Vec<String> {
     use std::io::BufRead;
     let stdin = std::io::stdin();
 
-    stdin.lock().lines()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap()
+    stdin.lock().lines().collect::<Result<Vec<_>, _>>().unwrap()
 }
 
 fn part1<S: AsRef<str>>(ss: &[S]) -> i64 {
@@ -36,7 +34,7 @@ fn part1<S: AsRef<str>>(ss: &[S]) -> i64 {
             let index = match counter {
                 2 => 0,
                 3 => 1,
-                _ => continue
+                _ => continue,
             };
 
             if !visited[index] {
@@ -61,7 +59,8 @@ fn part2<S: AsRef<str>>(ss: &[S]) -> String {
             let right = ss[x].as_ref();
             assert_eq!(left.len(), right.len());
 
-            let mut differences = left.chars()
+            let mut differences = left
+                .chars()
                 .zip(right.chars())
                 .enumerate()
                 .filter(|&(_, (a, b))| a != b)
@@ -105,13 +104,7 @@ fn part1_accepts_vec_of_strings() {
 #[test]
 fn part2_example() {
     let input = &[
-        "abcde",
-        "fghij",
-        "klmno",
-        "pqrst",
-        "fguij",
-        "axcye",
-        "wvxyz",
+        "abcde", "fghij", "klmno", "pqrst", "fguij", "axcye", "wvxyz",
     ];
 
     assert_eq!(part2(&input[..]), "fgij");

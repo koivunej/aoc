@@ -4,8 +4,7 @@ fn main() {
     let part1 = numbers.iter().sum::<i64>();
     println!("part1: {}", part1);
 
-    let part2 = part2(&numbers)
-        .expect("there should be one repeating in an infinite cycle");
+    let part2 = part2(&numbers).expect("there should be one repeating in an infinite cycle");
     println!("part2: {}", part2);
 
     assert_eq!(part1, 406);
