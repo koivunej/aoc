@@ -1,7 +1,8 @@
 // aoc2018 library or crate code
 
 pub fn try_fold_stdin<F, St, E>(initial: St, mut inner: F) -> Result<St, E>
-where F: for<'a> FnMut(&mut St, &'a str) -> Result<(), E>
+where
+    F: for<'a> FnMut(&mut St, &'a str) -> Result<(), E>,
 {
     use std::io::BufRead;
 
@@ -28,7 +29,8 @@ where F: for<'a> FnMut(&mut St, &'a str) -> Result<(), E>
 }
 
 pub fn process_stdin_lines<F>(mut inner: F)
-where F: for<'a> FnMut(&'a str) -> ()
+where
+    F: for<'a> FnMut(&'a str) -> (),
 {
     use std::io::BufRead;
 
