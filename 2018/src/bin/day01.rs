@@ -30,31 +30,16 @@ fn part2(freqs: &[i64]) -> Option<i64> {
 }
 
 fn parse_from_stdin() -> Result<Vec<i64>, std::io::Error> {
-    use std::io::BufRead;
-
-    let stdin = std::io::stdin();
-    let mut lock = stdin.lock();
-    let mut buffer = String::new();
-
-    let mut vec = Vec::new();
-
-    loop {
-        buffer.clear();
-        let bytes = lock.read_line(&mut buffer)?;
-
-        if bytes == 0 {
-            break;
-        }
-
+    aoc2018::try_fold_stdin(Vec::new(), |values, buffer| {
         let num = buffer
             .trim()
             .parse::<i64>()
-            .unwrap_or_else(|e| panic!("failed to parse ({}): {:?}", e, buffer));
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
-        vec.push(num);
-    }
+        values.push(num);
 
-    Ok(vec)
+        Ok(())
+    })
 }
 
 #[test]
