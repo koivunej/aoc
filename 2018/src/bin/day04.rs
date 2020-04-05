@@ -83,7 +83,12 @@ fn main() -> Result<(), EventParsingFailure> {
 
     let (guard_id, _, minute_most_frequently) = slept
         .iter()
-        .map(|(guard_id, minutes)| minutes.iter().max_by_key(|(_, times)| *times).map(move |(minute, times)| (*guard_id, *times, *minute)))
+        .map(|(guard_id, minutes)| {
+            minutes
+                .iter()
+                .max_by_key(|(_, times)| *times)
+                .map(move |(minute, times)| (*guard_id, *times, *minute))
+        })
         .map(Option::unwrap)
         .max_by_key(|(_, times, _)| *times)
         .unwrap();
