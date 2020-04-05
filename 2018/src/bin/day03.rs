@@ -16,8 +16,8 @@ enum Dispute {
 }
 
 fn main() {
+    use std::collections::{hash_map::Entry, HashMap};
     use std::io::BufRead;
-    use std::collections::{HashMap, hash_map::Entry};
 
     let mut inches = HashMap::new();
     // keep track of undisputed claims, which will initially contain all but as there arrive
@@ -30,7 +30,8 @@ fn main() {
 
     loop {
         buffer.clear();
-        let bytes = locked.read_line(&mut buffer)
+        let bytes = locked
+            .read_line(&mut buffer)
             .expect("Failed to read line from stdin");
 
         if bytes == 0 {
@@ -62,13 +63,15 @@ fn main() {
         }
     }
 
-    let part1 = inches.values()
-        .filter(|&&(_, c)| c > 1)
-        .count();
+    let part1 = inches.values().filter(|&&(_, c)| c > 1).count();
 
     println!("part1: {}", part1);
 
-    let undisputed = disputes.into_iter().filter(|(_, v)| *v == Dispute::Undisputed).map(|(k, _)| k).collect::<Vec<_>>();
+    let undisputed = disputes
+        .into_iter()
+        .filter(|(_, v)| *v == Dispute::Undisputed)
+        .map(|(k, _)| k)
+        .collect::<Vec<_>>();
 
     let part2 = undisputed.iter().single();
 
@@ -80,12 +83,14 @@ fn main() {
 
 trait IteratorExt {
     fn single<T>(self) -> Result<T, Option<(T, T)>>
-        where Self: Iterator<Item = T>;
+    where
+        Self: Iterator<Item = T>;
 }
 
 impl<Iter: Iterator> IteratorExt for Iter {
     fn single<T>(mut self) -> Result<T, Option<(T, T)>>
-        where Self: Iterator<Item = T>,
+    where
+        Self: Iterator<Item = T>,
     {
         let only = self.next();
         match only {
@@ -97,17 +102,19 @@ impl<Iter: Iterator> IteratorExt for Iter {
                 }
 
                 Err(Some((only, next.unwrap())))
-            },
-            None => {
-                Err(None)
             }
+            None => Err(None),
         }
     }
 }
 
 fn parse_claim(s: &str) -> (usize, Point, (u64, u64)) {
+    use nom::{
+        bytes::complete::{tag, take_while},
+        combinator::map_res,
+        IResult,
+    };
     use std::str::FromStr;
-    use nom::{IResult, bytes::complete::{tag, take_while}, combinator::map_res};
 
     fn next_pair<'a, T: FromStr>(s: &'a str, sep: &str) -> IResult<&'a str, (T, T)> {
         let (s, x) = next_num::<T>(s)?;
@@ -117,10 +124,7 @@ fn parse_claim(s: &str) -> (usize, Point, (u64, u64)) {
     }
 
     fn next_num<T: FromStr>(s: &str) -> IResult<&str, T> {
-        map_res(
-            take_while(|c: char| c.is_digit(10)),
-            T::from_str
-        )(s)
+        map_res(take_while(|c: char| c.is_digit(10)), T::from_str)(s)
     }
 
     fn inner(s: &str) -> IResult<&str, (usize, Point, (u64, u64))> {
