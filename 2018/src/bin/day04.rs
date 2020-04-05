@@ -81,7 +81,19 @@ fn main() -> Result<(), EventParsingFailure> {
 
     println!("part1: {}", part1);
 
+    let (guard_id, _, minute_most_frequently) = slept
+        .iter()
+        .map(|(guard_id, minutes)| minutes.iter().max_by_key(|(_, times)| *times).map(move |(minute, times)| (*guard_id, *times, *minute)))
+        .map(Option::unwrap)
+        .max_by_key(|(_, times, _)| *times)
+        .unwrap();
+
+    let part2 = guard_id * minute_most_frequently.1 as usize;
+
+    println!("part2: {}", part2);
+
     assert_eq!(part1, 95199);
+    assert_eq!(part2, 7887);
 
     Ok(())
 }
