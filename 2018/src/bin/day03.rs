@@ -9,11 +9,20 @@ impl std::ops::Add for Point {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Dispute {
+    Undisputed,
+    Disputed,
+}
+
 fn main() {
     use std::io::BufRead;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, hash_map::Entry};
 
     let mut inches = HashMap::new();
+    // keep track of undisputed claims, which will initially contain all but as there arrive
+    // competing claims in their region, the id will be removed
+    let mut disputes = HashMap::new();
 
     let stdin = std::io::stdin();
     let mut locked = stdin.lock();
@@ -29,23 +38,71 @@ fn main() {
         }
 
         // #int @ Left,Top: WidthxHeight
-        let (_, corner, size) = parse_claim(buffer.trim());
+        let (id, corner, size) = parse_claim(buffer.trim());
 
         for y_off in 0..size.1 {
             for x_off in 0..size.0 {
                 let p = corner + Point(x_off as i64, y_off as i64);
-                *inches.entry(p).or_insert(0) += 1;
+                match inches.entry(p) {
+                    Entry::Vacant(ve) => {
+                        ve.insert((id, 1));
+                        disputes.entry(id).or_insert(Dispute::Undisputed);
+                    }
+                    Entry::Occupied(oe) if oe.get().0 == id => unreachable!("duplicate inch claim"),
+                    Entry::Occupied(mut oe) => {
+                        let (original_id, count) = oe.get_mut();
+                        *count += 1;
+
+                        // both the original and the new claim must now be marked as disputed
+                        disputes.insert(*original_id, Dispute::Disputed);
+                        disputes.insert(id, Dispute::Disputed);
+                    }
+                }
             }
         }
     }
 
     let part1 = inches.values()
-        .filter(|&&c| c > 1)
+        .filter(|&&(_, c)| c > 1)
         .count();
 
     println!("part1: {}", part1);
 
+    let undisputed = disputes.into_iter().filter(|(_, v)| *v == Dispute::Undisputed).map(|(k, _)| k).collect::<Vec<_>>();
+
+    let part2 = undisputed.iter().single();
+
+    println!("part2: {:?}", part2);
+
     assert_eq!(part1, 111_485);
+    assert_eq!(part2, Ok(&113));
+}
+
+trait IteratorExt {
+    fn single<T>(self) -> Result<T, Option<(T, T)>>
+        where Self: Iterator<Item = T>;
+}
+
+impl<Iter: Iterator> IteratorExt for Iter {
+    fn single<T>(mut self) -> Result<T, Option<(T, T)>>
+        where Self: Iterator<Item = T>,
+    {
+        let only = self.next();
+        match only {
+            Some(only) => {
+                let next = self.next();
+
+                if next.is_none() {
+                    return Ok(only);
+                }
+
+                Err(Some((only, next.unwrap())))
+            },
+            None => {
+                Err(None)
+            }
+        }
+    }
 }
 
 fn parse_claim(s: &str) -> (usize, Point, (u64, u64)) {
