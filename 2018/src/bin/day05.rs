@@ -8,7 +8,7 @@ fn main() {
 
     println!("part1: {}", part1);
 
-    let part2 = (b'a'..b'z')
+    let part2 = (b'a'..=b'z')
         .map(move |removed| {
             reduced.clear();
             let filtered = buffer
@@ -75,7 +75,7 @@ fn reaction(a: char, b: char) -> bool {
 fn part1_example() {
     let input = "dabAcCaCBAcCcaDA";
 
-    let reduced = reduce(input);
+    let reduced = reduce(input.chars());
 
     assert_eq!(reduced, b"dabCBAcaDA");
 }
