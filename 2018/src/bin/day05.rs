@@ -3,20 +3,45 @@ fn main() {
     let mut buffer = String::new();
     let _ = stdin().read_line(&mut buffer).unwrap();
 
-    let part1 = reduce(buffer.trim()).len();
+    let mut reduced = reduce(buffer.trim().chars());
+    let part1 = reduced.len();
 
     println!("part1: {}", part1);
 
+    let part2 = (b'a'..b'z')
+        .map(move |removed| {
+            reduced.clear();
+            let filtered = buffer
+                .trim()
+                .chars()
+                .filter(|ch| ch.to_ascii_lowercase() as u8 != removed);
+            reduce_into(filtered, &mut reduced);
+            reduced.len()
+        })
+        .min()
+        .unwrap();
+
+    println!("part2: {}", part2);
+
     assert_ne!(part1, 17220);
     assert_eq!(part1, 9822);
+
+    assert_eq!(part2, 5726);
 }
 
-fn reduce(buffer: &str) -> Vec<u8> {
-    let mut reduced = Vec::with_capacity(buffer.len());
+fn reduce(buffer: impl Iterator<Item = char>) -> Vec<u8> {
+    let sz = buffer.size_hint();
+    let mut reduced = Vec::with_capacity(sz.1.unwrap_or(sz.0));
 
+    reduce_into(buffer, &mut reduced);
+
+    reduced
+}
+
+fn reduce_into(buffer: impl Iterator<Item = char>, reduced: &mut Vec<u8>) {
     let mut last = None;
 
-    for ch in buffer.chars() {
+    for ch in buffer {
         let prev = std::mem::replace(&mut last, Some(ch));
 
         match (prev, ch) {
@@ -40,8 +65,6 @@ fn reduce(buffer: &str) -> Vec<u8> {
             }
         }
     }
-
-    reduced
 }
 
 fn reaction(a: char, b: char) -> bool {
