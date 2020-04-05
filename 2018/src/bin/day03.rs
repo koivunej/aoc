@@ -17,51 +17,38 @@ enum Dispute {
 
 fn main() {
     use std::collections::{hash_map::Entry, HashMap};
-    use std::io::BufRead;
 
     let mut inches = HashMap::new();
     // keep track of undisputed claims, which will initially contain all but as there arrive
     // competing claims in their region, the id will be removed
     let mut disputes = HashMap::new();
 
-    let stdin = std::io::stdin();
-    let mut locked = stdin.lock();
-    let mut buffer = String::new();
-
-    loop {
-        buffer.clear();
-        let bytes = locked
-            .read_line(&mut buffer)
-            .expect("Failed to read line from stdin");
-
-        if bytes == 0 {
-            break;
-        }
-
+    aoc2018::process_stdin_lines(|buffer| {
         // #int @ Left,Top: WidthxHeight
         let (id, corner, size) = parse_claim(buffer.trim());
 
-        for y_off in 0..size.1 {
-            for x_off in 0..size.0 {
-                let p = corner + Point(x_off as i64, y_off as i64);
-                match inches.entry(p) {
-                    Entry::Vacant(ve) => {
-                        ve.insert((id, 1));
-                        disputes.entry(id).or_insert(Dispute::Undisputed);
-                    }
-                    Entry::Occupied(oe) if oe.get().0 == id => unreachable!("duplicate inch claim"),
-                    Entry::Occupied(mut oe) => {
-                        let (original_id, count) = oe.get_mut();
-                        *count += 1;
+        let points = (0..size.1)
+            .flat_map(|y| (0..size.0).map(move |x| (x, y)))
+            .map(|(x, y)| corner + Point(x as i64, y as i64));
 
-                        // both the original and the new claim must now be marked as disputed
-                        disputes.insert(*original_id, Dispute::Disputed);
-                        disputes.insert(id, Dispute::Disputed);
-                    }
+        for p in points {
+            match inches.entry(p) {
+                Entry::Vacant(ve) => {
+                    ve.insert((id, 1));
+                    disputes.entry(id).or_insert(Dispute::Undisputed);
+                }
+                Entry::Occupied(oe) if oe.get().0 == id => unreachable!("duplicate inch claim"),
+                Entry::Occupied(mut oe) => {
+                    let (original_id, count) = oe.get_mut();
+                    *count += 1;
+
+                    // both the original and the new claim must now be marked as disputed
+                    disputes.insert(*original_id, Dispute::Disputed);
+                    disputes.insert(id, Dispute::Disputed);
                 }
             }
         }
-    }
+    });
 
     let part1 = inches.values().filter(|&&(_, c)| c > 1).count();
 
