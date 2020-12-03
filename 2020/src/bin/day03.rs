@@ -7,15 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     let slopes = &[(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)];
 
-    let mut counters = slopes
-        .iter()
-        .map(|slope| TreeCounter {
-            slope,
-            x: 0,
-            skip: 1,
-            trees: 0,
-        })
-        .collect::<Vec<_>>();
+    let mut counters = slopes.iter().map(TreeCounter::from).collect::<Vec<_>>();
 
     loop {
         buf.clear();
@@ -53,10 +45,22 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 }
 
 struct TreeCounter {
-    slope: &'static (u16, u8),
-    x: u16,
+    slope: (u8, u8),
+    x: u8,
     skip: u8,
     trees: usize,
+}
+
+impl<'a> From<&'a (u8, u8)> for TreeCounter {
+    fn from(slope: &'a (u8, u8)) -> Self {
+        TreeCounter {
+            slope: (slope.0, slope.1),
+            x: 0,
+            // having to start this as 1 as in "skip 1" feels unnatural
+            skip: 1,
+            trees: 0,
+        }
+    }
 }
 
 impl TreeCounter {
@@ -71,7 +75,7 @@ impl TreeCounter {
             self.trees += 1;
         }
 
-        self.x = (self.x + self.slope.0) % map.len() as u16;
+        self.x = (self.x + self.slope.0) % map.len() as u8;
         self.skip = self.slope.1;
     }
 
