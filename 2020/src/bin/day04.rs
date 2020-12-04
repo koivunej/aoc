@@ -9,7 +9,7 @@ use regex::Regex;
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let stdin = std::io::stdin();
 
-    let (part_one, part_two) = process(stdin.lock())?;
+    let (_, part_one, part_two) = process(stdin.lock())?;
 
     println!("{}", part_one);
     println!("{}", part_two);
@@ -24,7 +24,9 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     Ok(())
 }
 
-fn process<R: BufRead>(input: R) -> Result<(usize, usize), Box<dyn std::error::Error + 'static>> {
+fn process<R: BufRead>(
+    input: R,
+) -> Result<(usize, usize, usize), Box<dyn std::error::Error + 'static>> {
     let required = [
         ("byr", validate_birth_year as fn(&str) -> bool),
         ("iyr", validate_issue_year),
@@ -39,6 +41,8 @@ fn process<R: BufRead>(input: R) -> Result<(usize, usize), Box<dyn std::error::E
     .collect::<HashMap<&str, fn(&str) -> bool>>();
 
     assert_eq!(required.len(), 7);
+
+    let mut records = 0;
     let mut part_one = 0;
     let mut part_two = 0;
 
@@ -54,9 +58,11 @@ fn process<R: BufRead>(input: R) -> Result<(usize, usize), Box<dyn std::error::E
         if valid {
             part_two += 1;
         }
+
+        records += 1;
     }
 
-    Ok((part_one, part_two))
+    Ok((records, part_one, part_two))
 }
 
 struct EmptyLineSeparated<R: BufRead> {
@@ -227,7 +233,7 @@ fn validate_passport_id(s: &str) -> bool {
 
 #[test]
 fn part_one_example() {
-    let (count, _) = process(std::io::BufReader::new(std::io::Cursor::new(
+    let (total, count, _) = process(std::io::BufReader::new(std::io::Cursor::new(
         b"ecl:gry pid:860033327 eyr:2020 hcl:#fffffd
 byr:1937 iyr:2017 cid:147 hgt:183cm
 
@@ -245,11 +251,12 @@ iyr:2011 ecl:brn hgt:59in",
     .unwrap();
 
     assert_eq!(2, count);
+    assert_eq!(4, total);
 }
 
 #[test]
 fn part_two_examples() {
-    let (_, count) = process(std::io::BufReader::new(std::io::Cursor::new(
+    let (total, _, count) = process(std::io::BufReader::new(std::io::Cursor::new(
         b"eyr:1972 cid:100
 hcl:#18171d ecl:amb hgt:170 pid:186cm iyr:2018 byr:1926
 
@@ -279,4 +286,5 @@ iyr:2010 hgt:158cm hcl:#b6652a ecl:blu byr:1944 eyr:2021 pid:093154719",
     )))
     .unwrap();
     assert_eq!(4, count);
+    assert_eq!(8, total);
 }
