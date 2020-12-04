@@ -92,6 +92,8 @@ impl<R: BufRead> EmptyLineSeparated<R> {
 
         loop {
             let before = if !self.in_record {
+                // avoid a drain in the else branch of buf.is_empty()
+                // by clearing the buffer before reading to it
                 self.buffer.clear();
                 0
             } else {
