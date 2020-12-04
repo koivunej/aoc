@@ -46,6 +46,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
             record_buffer.clear();
 
             if read == 0 {
+                // I was originally of course just breaking with this, leaving the last element
+                // unprocessed...
                 break;
             } else {
                 continue;
@@ -58,6 +60,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         }
         record_buffer.push_str(buf);
     }
+
+    assert!(record_buffer.is_empty());
 
     println!("{}", part_one);
 
