@@ -35,7 +35,7 @@ fn process<R: BufRead>(input: R) -> Result<(usize, usize), Box<dyn std::error::E
         ("pid", validate_passport_id),
     ]
     .iter()
-    .map(|&s| s)
+    .copied()
     .collect::<HashMap<&str, fn(&str) -> bool>>();
 
     assert_eq!(required.len(), 7);
@@ -138,7 +138,7 @@ fn inspect_record(record_buffer: &str, required: &HashMap<&str, fn(&str) -> bool
 
     let has_all = found_keys.len() == required.len();
 
-    return (has_all, has_all && valid);
+    (has_all, has_all && valid)
 }
 
 fn validate_birth_year(s: &str) -> bool {
@@ -179,7 +179,7 @@ fn validate_height(s: &str) -> bool {
     lazy_static! {
         static ref RE: Regex = Regex::new("^([0-9]+)(in|cm)$").unwrap();
     }
-    for cap in RE.captures_iter(s) {
+    if let Some(cap) = RE.captures_iter(s).next() {
         let amount = cap[1].parse::<usize>();
         let unit = &cap[2];
 
