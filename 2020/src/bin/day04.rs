@@ -117,7 +117,7 @@ fn inspect_record(
 
 fn validate_birth_year(s: &str) -> bool {
     if let Ok(y) = s.parse::<usize>() {
-        1920 <= y && y <= 2002
+        (1920..=2002).contains(&y)
     } else {
         false
     }
@@ -125,7 +125,7 @@ fn validate_birth_year(s: &str) -> bool {
 
 fn validate_issue_year(s: &str) -> bool {
     if let Ok(y) = s.parse::<usize>() {
-        2010 <= y && y <= 2020
+        (2010..=2020).contains(&y)
     } else {
         false
     }
@@ -143,7 +143,7 @@ fn issue_year() {
 
 fn validate_exp_year(s: &str) -> bool {
     if let Ok(y) = s.parse::<usize>() {
-        2020 <= y && y <= 2030
+        (2020..=2030).contains(&y)
     } else {
         false
     }
@@ -158,8 +158,8 @@ fn validate_height(s: &str) -> bool {
         let unit = &cap[2];
 
         return match (unit, amount) {
-            ("cm", Ok(h)) if 150 <= h && h <= 193 => true,
-            ("in", Ok(h)) if 59 <= h && h <= 76 => true,
+            ("cm", Ok(ref h)) if (150..=193).contains(h) => true,
+            ("in", Ok(ref h)) if (59..=76).contains(h) => true,
             _ => false,
         };
     }
