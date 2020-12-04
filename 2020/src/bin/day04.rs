@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 #[macro_use]
 extern crate lazy_static;
 use regex::Regex;
@@ -108,7 +108,6 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     assert_eq!(required.len(), 7);
 
-    // let mut found = HashSet::with_capacity(expected.len());
     let mut in_record = false;
     let mut record_buffer = String::new();
 
@@ -123,8 +122,6 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
         if buf.is_empty() {
             assert!(in_record, "empty line outside of record?");
-
-            println!("{:?}", record_buffer);
 
             let (has_all, valid) = inspect_record(&record_buffer, &required);
 
@@ -174,49 +171,30 @@ fn inspect_record(
     record_buffer: &str,
     required: &HashMap<&str, for<'s> fn(&'s str) -> bool>,
 ) -> (bool, bool) {
-    let found = record_buffer
-        .split(' ')
-        .map(|field| {
-            let mut split = field.splitn(2, ':');
-            let key = split.next().unwrap();
-            let value = split.next().unwrap();
-            (key, value)
-        })
-        .collect::<HashMap<&str, &str>>();
-    /*.for_each(|key| {
-        if !found.insert(key) {
-            println!("duplicate field '{}'", key);
-        }
-    });*/
+    let found = record_buffer.split(' ').map(|field| {
+        let mut split = field.splitn(2, ':');
+        let key = split.next().unwrap();
+        let value = split.next().unwrap();
+        (key, value)
+    });
 
-    if found.len() >= required.len() {
-        let mut valid = true;
-        let mut found_required = 0;
+    let mut valid = true;
+    let mut found_keys = HashSet::new();
 
-        for (key, value) in found {
-            if key == "cid" {
-                // optional
-                continue;
-            }
-
-            if !required[key](value) {
-                valid = false;
-                println!("invalid field {}: {}", key, value);
-            }
-            found_required += 1;
+    for (key, value) in found {
+        if key == "cid" {
+            // optional
+            continue;
         }
 
-        let has_all = found_required == required.len();
+        if !required[key](value) {
+            valid = false;
+        }
 
-        return (has_all, has_all && valid);
-    } else {
-        println!(
-            "bad after found {} needed {}: {:?}",
-            found.len(),
-            required.len(),
-            found
-        );
+        assert!(found_keys.insert(key));
     }
 
-    (false, false)
+    let has_all = found_keys.len() == required.len();
+
+    return (has_all, has_all && valid);
 }
