@@ -1,74 +1,15 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    io::BufRead,
+};
 #[macro_use]
 extern crate lazy_static;
 use regex::Regex;
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
-    use std::io::BufRead;
     let stdin = std::io::stdin();
-    let mut stdin = stdin.lock();
-    let mut buf = String::new();
 
-    let required = [
-        ("byr", validate_birth_year as for<'s> fn(&'s str) -> bool),
-        ("iyr", validate_issue_year),
-        ("eyr", validate_exp_year),
-        ("hgt", validate_height),
-        ("hcl", validate_hair_color),
-        ("ecl", validate_eye_color),
-        ("pid", validate_passport_id),
-    ]
-    .iter()
-    .map(|&s| s)
-    .collect::<HashMap<&str, for<'s> fn(&'s str) -> bool>>();
-
-    assert_eq!(required.len(), 7);
-
-    let mut in_record = false;
-    let mut record_buffer = String::new();
-
-    let mut part_one = 0;
-    let mut part_two = 0;
-
-    loop {
-        buf.clear();
-
-        let read = stdin.read_line(&mut buf)?;
-        let buf = buf.trim();
-
-        if buf.is_empty() {
-            assert!(in_record, "empty line outside of record?");
-
-            let (has_all, valid) = inspect_record(&record_buffer, &required);
-
-            if has_all {
-                part_one += 1;
-            }
-
-            if valid {
-                part_two += 1;
-            }
-
-            in_record = false;
-            record_buffer.clear();
-
-            if read == 0 {
-                // I was originally of course just breaking with this, leaving the last element
-                // unprocessed...
-                break;
-            } else {
-                continue;
-            }
-        }
-
-        in_record = true;
-        if !record_buffer.is_empty() {
-            record_buffer.push(' ');
-        }
-        record_buffer.push_str(buf);
-    }
-
-    assert!(record_buffer.is_empty());
+    let (part_one, part_two) = process(stdin.lock())?;
 
     println!("{}", part_one);
     println!("{}", part_two);
@@ -81,6 +22,97 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     assert_eq!(101, part_two);
 
     Ok(())
+}
+
+fn process<R: BufRead>(
+    mut input: R,
+) -> Result<(usize, usize), Box<dyn std::error::Error + 'static>> {
+    let required = [
+        ("byr", validate_birth_year as fn(&str) -> bool),
+        ("iyr", validate_issue_year),
+        ("eyr", validate_exp_year),
+        ("hgt", validate_height),
+        ("hcl", validate_hair_color),
+        ("ecl", validate_eye_color),
+        ("pid", validate_passport_id),
+    ]
+    .iter()
+    .map(|&s| s)
+    .collect::<HashMap<&str, fn(&str) -> bool>>();
+
+    assert_eq!(required.len(), 7);
+    let mut part_one = 0;
+    let mut part_two = 0;
+
+    let mut buf = String::new();
+    let mut splitter = EmptyLineSeparated::default();
+
+    loop {
+        buf.clear();
+
+        let read = input.read_line(&mut buf)?;
+        let buf = buf.trim();
+
+        if let Some(record_buffer) = splitter.split(buf) {
+            let (has_all, valid) = inspect_record(&record_buffer, &required);
+
+            if has_all {
+                part_one += 1;
+            }
+
+            if valid {
+                part_two += 1;
+            }
+        }
+
+        if read == 0 {
+            // I was originally of course just breaking with this, leaving the last element
+            // unprocessed...
+            break;
+        }
+    }
+
+    assert!(splitter.is_empty());
+    Ok((part_one, part_two))
+}
+
+struct EmptyLineSeparated {
+    in_record: bool,
+    buffer: String,
+}
+
+impl Default for EmptyLineSeparated {
+    fn default() -> Self {
+        Self {
+            in_record: true,
+            buffer: String::new(),
+        }
+    }
+}
+
+impl EmptyLineSeparated {
+    fn split<'a>(&'a mut self, input: &str) -> Option<&'a str> {
+        if input.is_empty() {
+            assert!(self.in_record);
+            self.in_record = false;
+            Some(&self.buffer)
+        } else {
+            if !self.in_record {
+                self.buffer.clear();
+            }
+            self.in_record = true;
+
+            if !self.buffer.is_empty() {
+                self.buffer.push(' ');
+            }
+            self.buffer.push_str(input);
+            None
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        !self.in_record || self.buffer.is_empty()
+    }
 }
 
 fn inspect_record(
