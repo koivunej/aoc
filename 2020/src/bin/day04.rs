@@ -112,10 +112,7 @@ impl<R: BufRead> EmptyLineSeparated<R> {
     }
 }
 
-fn inspect_record(
-    record_buffer: &str,
-    required: &HashMap<&str, for<'s> fn(&'s str) -> bool>,
-) -> (bool, bool) {
+fn inspect_record(record_buffer: &str, required: &HashMap<&str, fn(&str) -> bool>) -> (bool, bool) {
     let found = record_buffer.split_whitespace().map(|field| {
         let mut split = field.splitn(2, ':');
         let key = split.next().unwrap();
