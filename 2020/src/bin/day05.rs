@@ -4,8 +4,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let mut stdin = stdin.lock();
 
     let mut buffer = String::new();
-
     let mut part_one = None;
+    let mut all = vec![];
 
     loop {
         buffer.clear();
@@ -17,9 +17,40 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         let id = find_seat(buffer.trim().as_bytes()).to_id();
 
         part_one = part_one.max(Some(id));
+
+        // collect in order to sort, and find the missing one in between
+        all.push(id);
     }
 
-    println!("{}", part_one.unwrap());
+    all.sort();
+
+    let missing_one_in_between = all
+        .windows(2)
+        .filter_map(|w| {
+            let earlier = w[0];
+            let later = w[1];
+            assert!(earlier < later);
+            if later - earlier == 2 {
+                Some(later - 1)
+            } else {
+                None
+            }
+        })
+        .fold(None, |acc, next| {
+            if acc.is_none() {
+                Some(next)
+            } else {
+                panic!("multiple results: {} and {}", acc.unwrap(), next);
+            }
+        });
+
+    let part_one = part_one.unwrap();
+    let part_two = missing_one_in_between.unwrap();
+    println!("{}", part_one);
+    println!("{}", part_two);
+
+    assert_eq!(892, part_one);
+    assert_eq!(625, part_two);
 
     Ok(())
 }
@@ -27,21 +58,28 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 fn find_seat(ins: &[u8]) -> (u8, u8) {
     let mut main = ins.iter();
 
+    // just a binary number encoded with FB and LR for 01
+    // rewriting to use u8::from_str_radix would probably take too long
+
     let row = main
         .by_ref()
+        .copied()
         .take(7)
         .enumerate()
-        .map(|(idx, ch)| (7 - idx, ch))
-        .inspect(|&(_, ch)| assert!(ch == &b'F' || ch == &b'B'))
-        .map(|(exp, ch)| if ch == &b'B' { 1 << (exp - 1) } else { 0 })
+        .inspect(|&(_, ch)| assert!(ch == b'F' || ch == b'B'))
+        .map(|(idx, ch)| if ch == b'B' { 1 << (7 - idx - 1) } else { 0 })
         .fold(0u8, |acc, next| acc | next);
 
     let seat = main
+        .by_ref()
+        .copied()
+        .take(3)
         .enumerate()
-        .map(|(idx, ch)| (3 - idx, ch))
-        .inspect(|&(_, ch)| assert!(ch == &b'L' || ch == &b'R'))
-        .map(|(exp, ch)| if ch == &b'R' { 1 << (exp - 1) } else { 0 })
+        .inspect(|&(_, ch)| assert!(ch == b'L' || ch == b'R'))
+        .map(|(idx, ch)| if ch == b'R' { 1 << (3 - idx - 1) } else { 0 })
         .fold(0u8, |acc, next| acc | next);
+
+    assert_eq!(main.next(), None);
 
     (row, seat)
 }
