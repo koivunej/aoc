@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::io::BufRead;
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
@@ -7,8 +7,9 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     let mut buffer = String::new();
 
-    let mut questions_anyone_answered_yes = HashSet::new();
-    let mut questions_everyone_answered_yes = HashMap::new();
+    let mut questions_anyone_answered_yes: HashSet<u8> = HashSet::new();
+    let mut questions_everyone_answered_yes: HashSet<u8> = HashSet::new();
+    let mut current_person_answers = HashSet::new();
 
     let mut part_one = 0;
     let mut part_two = 0;
@@ -25,12 +26,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
             part_one += questions_anyone_answered_yes.len();
             questions_anyone_answered_yes.clear();
 
-            let yes_answers_in_group = questions_everyone_answered_yes
-                .drain()
-                .filter(|&(_, v)| v == group_persons)
-                .count();
-
-            part_two += yes_answers_in_group;
+            part_two += questions_everyone_answered_yes.len();
+            questions_everyone_answered_yes.clear();
 
             group_persons = 0;
 
@@ -44,11 +41,15 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         group_persons += 1;
 
         // process one persons answers
-        buffer.trim().chars().for_each(|ch| {
-            questions_anyone_answered_yes.insert(ch);
+        current_person_answers.extend(buffer.trim().as_bytes().iter().copied());
 
-            *questions_everyone_answered_yes.entry(ch).or_insert(0) += 1;
-        });
+        if group_persons == 1 {
+            questions_everyone_answered_yes.extend(current_person_answers.iter().copied());
+        } else {
+            questions_everyone_answered_yes.retain(|b| current_person_answers.contains(b));
+        }
+
+        questions_anyone_answered_yes.extend(current_person_answers.drain());
     }
 
     println!("{}", part_one);
