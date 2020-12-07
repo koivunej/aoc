@@ -14,4 +14,5 @@ nightly = ["packed_simd"]
 itertools = "0.9"
 regex = "1.4"
 lazy_static = "*"
+indexmap = "1.6"
 packed_simd = { version = "0.3.4", package = "packed_simd_2", optional = true }
