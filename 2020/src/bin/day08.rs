@@ -129,8 +129,6 @@ fn find_termination(visited: &HashSet<usize>, code: &[(Op, i64)]) -> i64 {
         .map(|(idx, _)| idx)
         .collect::<Vec<_>>();
 
-    let mut code = code.to_vec();
-
     let mut visited = HashSet::new();
 
     for candidate in candidates {
@@ -148,14 +146,10 @@ fn find_termination(visited: &HashSet<usize>, code: &[(Op, i64)]) -> i64 {
 
         assert_eq!(pc, candidate);
 
-        // just for printing
         let replace_at = pc;
 
-        // keep around to be restored
-        let old = code[pc];
-
         // temporary replacement
-        code[pc] = (Op::Nop, 0);
+        let forced_nop = (Op::Nop, 0);
 
         let mut count = 0;
 
@@ -165,7 +159,12 @@ fn find_termination(visited: &HashSet<usize>, code: &[(Op, i64)]) -> i64 {
             let mut visited = visited.clone();
 
             while visited.insert(pc) && pc != code.len() {
-                execute(&code[pc], &mut pc, &mut reg_acc);
+                let code = if pc == replace_at {
+                    &forced_nop
+                } else {
+                    &code[pc]
+                };
+                execute(code, &mut pc, &mut reg_acc);
                 count += 1;
             }
 
@@ -177,9 +176,6 @@ fn find_termination(visited: &HashSet<usize>, code: &[(Op, i64)]) -> i64 {
                 return reg_acc;
             }
         }
-
-        // replace back
-        code[pc] = old;
 
         println!(
             "did not find with replacement at {}, executed {} more",
