@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::convert::TryInto;
 use std::io::BufRead;
 
@@ -12,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let mut code = vec![];
     let mut pc = 0;
     let mut reg_acc = 0;
-    let mut visited = HashSet::new();
+    let mut visited = bitvec::vec::BitVec::<LocalBits, usize>::new();
 
     loop {
         buffer.clear();
@@ -82,20 +81,30 @@ enum Op {
     Jump,
 }
 
+use bitvec::{order::LocalBits, vec::BitVec};
+
 fn interpret_ahead(
     part_one: &mut Option<i64>,
-    visited: &mut HashSet<usize>,
+    visited: &mut BitVec<LocalBits, usize>,
     code: &[(Op, i64)],
     pc: &mut usize,
     reg_acc: &mut i64,
 ) {
     while part_one.is_none() && code.len() > *pc {
-        if !visited.insert(*pc) {
+        let at = *pc;
+
+        while visited.len() <= at {
+            visited.push(false);
+        }
+
+        if visited[at] {
             *part_one = Some(*reg_acc);
             break;
         }
 
-        execute(&code[*pc], pc, reg_acc);
+        visited.set(at, true);
+
+        execute(&code[at], pc, reg_acc);
     }
 }
 
@@ -115,7 +124,7 @@ fn execute(code: &(Op, i64), pc: &mut usize, reg_acc: &mut i64) {
     *pc += increment;
 }
 
-fn find_termination(visited: &HashSet<usize>, code: &[(Op, i64)]) -> i64 {
+fn find_termination(visited: &BitVec<LocalBits, usize>, code: &[(Op, i64)]) -> i64 {
     // need to find a single instruction to modify so that the pc will become code.len()
     // since the current corrupted version loops this has to be some negative jump following which
     // no instructions were executed...?
@@ -123,13 +132,12 @@ fn find_termination(visited: &HashSet<usize>, code: &[(Op, i64)]) -> i64 {
     let candidates = code
         .iter()
         .enumerate()
-        .filter(|(idx, _)| visited.contains(idx))
+        .filter(|&(idx, _)| visited[idx])
         // not filtering on arg0 as we might need to find an earlier positive jump
-        .filter(|(_, (op, _arg0))| *op == Op::Jump)
-        .map(|(idx, _)| idx)
-        .collect::<Vec<_>>();
+        .filter_map(|(idx, (op, _))| if *op == Op::Jump { Some(idx) } else { None });
 
-    let mut visited = HashSet::new();
+    let mut visited = bitvec::bitvec![0; code.len()];
+    let mut corrupted_visited = visited.clone();
 
     for candidate in candidates {
         // was kind of hoping that these could had been kept outside the for loop
@@ -137,10 +145,11 @@ fn find_termination(visited: &HashSet<usize>, code: &[(Op, i64)]) -> i64 {
         let mut pc = 0;
         let mut reg_acc = 0;
 
-        visited.clear();
+        visited.set_all(false);
 
         while pc != candidate {
-            assert!(visited.insert(pc));
+            assert!(!visited[pc]);
+            visited.set(pc, true);
             execute(&code[pc], &mut pc, &mut reg_acc);
         }
 
@@ -156,9 +165,14 @@ fn find_termination(visited: &HashSet<usize>, code: &[(Op, i64)]) -> i64 {
         {
             let mut pc = pc;
             let mut reg_acc = reg_acc;
-            let mut visited = visited.clone();
+            corrupted_visited.copy_from_bitslice(&visited);
 
-            while visited.insert(pc) && pc != code.len() {
+            while pc != code.len() {
+                if corrupted_visited[pc] {
+                    // looping again
+                    break;
+                }
+                corrupted_visited.set(pc, true);
                 let code = if pc == replace_at {
                     &forced_nop
                 } else {
