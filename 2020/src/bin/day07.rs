@@ -1,6 +1,5 @@
 use indexmap::IndexSet;
 use regex::Regex;
-use std::collections::HashMap;
 use std::io::BufRead;
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
@@ -27,9 +26,8 @@ struct Bag {
 
 struct Graph {
     intern: IndexSet<String>,
-    // since interning gives us contigious usizes these hashmaps should had been just Vec<Vec<_>>
-    forward: HashMap<usize, Vec<Bag>>,
-    backward: HashMap<usize, Vec<usize>>,
+    forward: Vec<Vec<Bag>>,
+    backward: Vec<Vec<usize>>,
 }
 
 fn parse<I: BufRead>(mut input: I) -> Result<Graph, Box<dyn std::error::Error + 'static>> {
@@ -37,10 +35,11 @@ fn parse<I: BufRead>(mut input: I) -> Result<Graph, Box<dyn std::error::Error + 
     let contained = Regex::new(r"(?:, )?([0-9]+) (\S+ \S+) bags?").unwrap();
 
     let mut intern = IndexSet::new();
-    let mut forward = HashMap::new();
-    let mut backward = HashMap::new();
+    let mut forward = Vec::new();
+    let mut backward = Vec::new();
 
     let mut line = String::new();
+    let mut bags = Vec::new();
 
     loop {
         line.clear();
@@ -52,23 +51,25 @@ fn parse<I: BufRead>(mut input: I) -> Result<Graph, Box<dyn std::error::Error + 
         for top_cap in top.captures_iter(line.trim()) {
             let material = intern.insert_full(top_cap[1].to_string()).0;
 
-            let next = contained
-                .captures_iter(&top_cap[2])
-                .map(|cap| {
-                    let count = cap[1].parse::<usize>().expect("matched already");
-                    let material = intern.insert_full(cap[2].to_string()).0;
-                    Bag { count, material }
-                })
-                .collect::<Vec<_>>();
+            bags.extend(contained.captures_iter(&top_cap[2]).map(|cap| {
+                let count = cap[1].parse::<usize>().expect("matched already");
+                let material = intern.insert_full(cap[2].to_string()).0;
+                Bag { count, material }
+            }));
 
-            for bag in &next {
-                backward
-                    .entry(bag.material)
-                    .or_insert(Vec::new())
-                    .push(material)
+            while backward.len() < intern.len() {
+                backward.push(Vec::new());
             }
 
-            assert_eq!(None, forward.insert(material, next));
+            for bag in &bags {
+                backward[bag.material].push(material);
+            }
+
+            while forward.len() < intern.len() {
+                forward.push(Vec::new());
+            }
+
+            forward[material].extend(bags.drain(..));
         }
     }
 
@@ -90,10 +91,8 @@ fn query_reachability(s: &str, bags: &Graph) -> usize {
     let mut visited = bitvec::bitvec![0; bags.intern.len()];
 
     work.extend(
-        bags.backward
-            .get(&key)
-            .map(|s| s.as_slice())
-            .unwrap_or(&[])
+        bags.backward[key]
+            .as_slice()
             .iter()
             .copied()
             .map(|key| (key, 1)),
@@ -108,10 +107,7 @@ fn query_reachability(s: &str, bags: &Graph) -> usize {
         visited.set(material_idx, true);
 
         work.extend(
-            bags.backward
-                .get(&material_idx)
-                .map(|s| s.as_slice())
-                .unwrap_or(&[])
+            bags.backward[material_idx]
                 .iter()
                 .copied()
                 .filter(|key| !visited[*key])
@@ -136,10 +132,7 @@ fn query_nesting(s: &str, bags: &Graph) -> usize {
     // let mut visited = HashSet::new();
 
     work.extend(
-        bags.forward
-            .get(&key)
-            .map(|s| s.as_slice())
-            .unwrap_or(&[])
+        bags.forward[key]
             .iter()
             .map(|bag| (bag.material, bag.count)),
     );
@@ -149,10 +142,7 @@ fn query_nesting(s: &str, bags: &Graph) -> usize {
 
     while let Some((material_idx, this_bag_count)) = work.pop_front() {
         work.extend(
-            bags.forward
-                .get(&material_idx)
-                .map(|s| s.as_slice())
-                .unwrap_or(&[])
+            bags.forward[material_idx]
                 .iter()
                 .map(|bag| (bag.material, this_bag_count * bag.count)),
         );
