@@ -60,14 +60,22 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     if part_one.is_none() {
         assert!(pc < code.len(), "pc out of range: {:?}", 0..code.len());
-
         panic!("not sure why no result");
     }
 
-    println!("{}", part_one.unwrap());
+    let part_two = find_termination(&visited, &code);
+
+    let part_one = part_one.unwrap();
+
+    println!("{}", part_one);
+    println!("{}", part_two);
+
+    assert_eq!(1766, part_one);
+    assert_eq!(1639, part_two);
     Ok(())
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Op {
     Nop,
     Acc,
@@ -87,18 +95,97 @@ fn interpret_ahead(
             break;
         }
 
-        let increment = match code[*pc] {
-            (Op::Nop, _) => 1,
-            (Op::Acc, x) => {
-                *reg_acc += x;
-                1
-            }
-            (Op::Jump, x) => {
-                *pc = (*pc as i64 + x).try_into().expect("overflow");
-                0
-            }
-        };
-
-        *pc += increment;
+        execute(&code[*pc], pc, reg_acc);
     }
+}
+
+fn execute(code: &(Op, i64), pc: &mut usize, reg_acc: &mut i64) {
+    let increment = match code {
+        (Op::Nop, _) => 1,
+        (Op::Acc, x) => {
+            *reg_acc += x;
+            1
+        }
+        (Op::Jump, x) => {
+            *pc = (*pc as i64 + x).try_into().expect("overflow");
+            0
+        }
+    };
+
+    *pc += increment;
+}
+
+fn find_termination(visited: &HashSet<usize>, code: &[(Op, i64)]) -> i64 {
+    // need to find a single instruction to modify so that the pc will become code.len()
+    // since the current corrupted version loops this has to be some negative jump following which
+    // no instructions were executed...?
+
+    let candidates = code
+        .iter()
+        .enumerate()
+        .filter(|(idx, _)| visited.contains(idx))
+        // not filtering on arg0 as we might need to find an earlier positive jump
+        .filter(|(_, (op, _arg0))| *op == Op::Jump)
+        .map(|(idx, _)| idx)
+        .collect::<Vec<_>>();
+
+    let mut code = code.to_vec();
+
+    let mut visited = HashSet::new();
+
+    for candidate in candidates {
+        // was kind of hoping that these could had been kept outside the for loop
+        // but failed somehow, or then it just can't be done.
+        let mut pc = 0;
+        let mut reg_acc = 0;
+
+        visited.clear();
+
+        while pc != candidate {
+            assert!(visited.insert(pc));
+            execute(&code[pc], &mut pc, &mut reg_acc);
+        }
+
+        assert_eq!(pc, candidate);
+
+        // just for printing
+        let replace_at = pc;
+
+        // keep around to be restored
+        let old = code[pc];
+
+        // temporary replacement
+        code[pc] = (Op::Nop, 0);
+
+        let mut count = 0;
+
+        {
+            let mut pc = pc;
+            let mut reg_acc = reg_acc;
+            let mut visited = visited.clone();
+
+            while visited.insert(pc) && pc != code.len() {
+                execute(&code[pc], &mut pc, &mut reg_acc);
+                count += 1;
+            }
+
+            if pc == code.len() {
+                println!(
+                    "found with replacement at {}, executed {} more",
+                    replace_at, count
+                );
+                return reg_acc;
+            }
+        }
+
+        // replace back
+        code[pc] = old;
+
+        println!(
+            "did not find with replacement at {}, executed {} more",
+            candidate, count
+        );
+    }
+
+    unreachable!("could not find a replacement")
 }
