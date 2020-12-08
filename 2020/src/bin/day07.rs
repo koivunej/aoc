@@ -1,6 +1,6 @@
 use indexmap::IndexSet;
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::BufRead;
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
@@ -87,7 +87,7 @@ fn query_reachability(s: &str, bags: &Graph) -> usize {
     };
 
     let mut work = std::collections::VecDeque::new();
-    let mut visited = HashSet::new();
+    let mut visited = bitvec::bitvec![0; bags.intern.len()];
 
     work.extend(
         bags.backward
@@ -102,9 +102,10 @@ fn query_reachability(s: &str, bags: &Graph) -> usize {
     let mut count = 0;
 
     while let Some((material_idx, depth)) = work.pop_front() {
-        if !visited.insert(material_idx) {
+        if visited[material_idx] {
             continue;
         }
+        visited.set(material_idx, true);
 
         work.extend(
             bags.backward
@@ -113,7 +114,7 @@ fn query_reachability(s: &str, bags: &Graph) -> usize {
                 .unwrap_or(&[])
                 .iter()
                 .copied()
-                .filter(|key| !visited.contains(key))
+                .filter(|key| !visited[*key])
                 .map(|key| (key, depth + 1)),
         );
         count += 1;
