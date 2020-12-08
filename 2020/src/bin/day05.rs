@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         all.push(id);
     }
 
-    all.sort();
+    all.sort_unstable();
 
     let missing_one_in_between = all
         .windows(2)

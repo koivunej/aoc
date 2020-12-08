@@ -56,6 +56,3 @@ pub mod io {
         }
     }
 }
-pub fn it_works() -> () {
-    todo!()
-}
