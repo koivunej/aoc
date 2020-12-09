@@ -89,50 +89,55 @@ fn find_weakness((part_one_index, part_one): (usize, u64), all: &[u64]) -> u64 {
     // [i + j, j]
     // [i + j + k, j + k, k]
     // ...
-    let mut sums = Vec::new();
+    let mut sums = VecDeque::with_capacity(all.len() / 2);
+    let mut sums_hwm = 0;
     for slice in &[before, after] {
-        sums.resize(slice.len(), 0);
         sums.clear();
-
-        let mut earliest_overflown = None;
 
         // eeech might need to dedup the all? or not? luckily did not.
         for (end, &i) in slice.iter().enumerate() {
             // avoid summing the i with itself
-            sums.push(0);
+            sums.push_back((end, 0));
 
-            for (start, sum) in sums
-                .iter_mut()
-                .enumerate()
-                .skip(earliest_overflown.unwrap_or(0))
-            {
+            let mut any_overflown = false;
+
+            for (start, sum) in sums.iter_mut() {
                 *sum += i;
 
                 if *sum == part_one {
                     let mut target = all
                         .iter()
-                        .skip(start)
-                        .take(end - start)
+                        .skip(*start)
+                        .take(end - *start)
                         .copied()
                         .collect::<Vec<_>>();
                     target.sort_unstable();
                     let (first, last) = (target[0], target[target.len() - 1]);
                     println!(
-                        "found {} + {} = {} with {} sums (total {})",
+                        "found {} + {} = {} with {} sums (at most {})",
                         first,
                         last,
                         first + last,
-                        sums.len() - earliest_overflown.unwrap_or(0),
                         sums.len(),
+                        sums_hwm,
                     );
                     return first + last;
-                } else if *sum > part_one {
-                    // try not to calculate this anymore
-                    // +1 because this is used with skip..
-                    //
-                    // could also use a vecdeque and pop_front here instead? then start would have
-                    // to be stored in the vecdeque as well.
-                    earliest_overflown = earliest_overflown.max(Some(start + 1));
+                }
+
+                if !any_overflown && *sum > part_one {
+                    any_overflown = true;
+                }
+            }
+
+            while any_overflown {
+                // remove such sums from the front which we no longer need to calculate
+                sums_hwm = sums_hwm.max(sums.len());
+
+                match sums.front() {
+                    Some((_, over)) if *over > part_one => {
+                        sums.pop_front();
+                    }
+                    _ => break,
                 }
             }
         }
