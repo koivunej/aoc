@@ -1,7 +1,17 @@
 use std::collections::{btree_map::Entry, BTreeMap, VecDeque};
 use std::io::BufRead;
 
+#[cfg(feature = "with_dhat")]
+use dhat::{Dhat, DhatAlloc};
+
+#[cfg(feature = "with_dhat")]
+#[global_allocator]
+static ALLOCATOR: DhatAlloc = DhatAlloc;
+
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    #[cfg(feature = "with_dhat")]
+    let _dhat = Dhat::start_heap_profiling();
+
     let stdin = std::io::stdin();
     let mut stdin = stdin.lock();
 
