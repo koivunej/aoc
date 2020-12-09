@@ -94,6 +94,10 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 }
 
 fn find_weakness((part_one_index, part_one): (usize, u64), all: &[u64]) -> u64 {
+    // this could be rolled into to the loop of main; sums could be maintained at all times and we
+    // would not need to buffer everything. this might be a good one to use differential dataflow
+    // on, or start working towards an implementation of it?
+
     assert_eq!(all[part_one_index], part_one);
     let (before, after) = all.split_at(part_one_index);
     let (_, after) = after.split_at(1); // remove the part_one
