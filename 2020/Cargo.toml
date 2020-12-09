@@ -6,9 +6,13 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.release]
+debug = 1
+
 [features]
 default = []
 nightly = ["packed_simd"]
+with_dhat = ["dhat"]
 
 [dependencies]
 itertools = "0.9"
@@ -16,4 +20,5 @@ regex = "1.4"
 lazy_static = "*"
 indexmap = "1.6"
 bitvec = "0.19"
+dhat = { version = "0.1", optional = true }
 packed_simd = { version = "0.3.4", package = "packed_simd_2", optional = true }
