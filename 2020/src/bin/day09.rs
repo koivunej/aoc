@@ -21,7 +21,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let mut all = Vec::new();
 
     {
-        let mut preample = VecDeque::with_capacity(25);
+        // the earliest preample index; preample is a sorted set of last 25 inputs
+        let mut preample_start = 0;
         let mut sorted_preample = BTreeMap::new();
 
         loop {
@@ -33,9 +34,15 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
             let num = buffer.trim().parse::<u64>().unwrap();
 
-            if preample.len() != preample.capacity() {
+            if part_one.is_some() {
+                // drop everything else
+                all.push(num);
+                continue;
+            }
+
+            if all.len() < 25 {
                 *sorted_preample.entry(num).or_insert(0) += 1;
-                preample.push_back(num);
+                all.push(num);
                 continue;
             }
 
@@ -55,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
                 part_one = part_one.or(Some((all.len(), num)));
             }
 
-            let oldest = preample.pop_front().unwrap();
+            let oldest = all[preample_start];
 
             match sorted_preample.entry(oldest) {
                 Entry::Vacant(_) => unreachable!("it is there"),
@@ -68,14 +75,12 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
             }
 
             *sorted_preample.entry(num).or_insert(0) += 1;
-            preample.push_back(num);
-
-            // for part_two
             all.push(num);
+            preample_start += 1;
         }
     }
 
-    let (part_one_index, part_one) = part_one.unwrap();
+    let (part_one_index, part_one) = part_one.expect("part_one failed to find anything");
     println!("{}", part_one);
 
     // need to find a window of `all` which sums up to part_one
