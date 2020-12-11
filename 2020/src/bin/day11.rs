@@ -1,4 +1,5 @@
 use std::convert::TryInto;
+use std::fmt;
 use std::io::BufRead;
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
@@ -111,15 +112,22 @@ fn directional_taken(old: &[Spot], coord: (i32, i32), width: usize, height: usiz
 
     directions
         .iter()
-        .filter(|&&(dx, dy)| {
-            (1..)
+        .filter_map(|&(dx, dy)| {
+            let mut first = (1..)
                 .map(|c| (coord.0 + (c * dx), coord.1 + (c * dy)))
                 .map(|coord| (width, height).to_index(coord))
                 .take_while(|maybe| maybe.is_some())
                 .filter_map(|maybe| maybe)
-                .any(|idx| old[idx] == Spot::TakenSeat)
+                .map(|idx| old[idx])
+                .take_while(|&spot| spot != Spot::Floor);
+
+            first.next().map(|kind| match kind {
+                Spot::Floor => unreachable!(),
+                Spot::TakenSeat => 1,
+                Spot::EmptySeat => 0,
+            })
         })
-        .count()
+        .sum::<usize>()
 }
 
 fn gol_until_settled(rules: RuleSet, width: usize, height: usize, map: &[Spot]) -> usize {
@@ -134,25 +142,7 @@ fn gol_until_settled(rules: RuleSet, width: usize, height: usize, map: &[Spot]) 
     for i in 0.. {
         gol_round(&rules, old, new, width, height);
         if DUMP {
-            println!();
-
-            new.iter()
-                .zip(all_coordinates(width as i32))
-                .for_each(|(spot, (x, _))| {
-                    if x == 0 {
-                        println!();
-                    }
-                    print!(
-                        "{}",
-                        match spot {
-                            Spot::Floor => '.',
-                            Spot::TakenSeat => '#',
-                            Spot::EmptySeat => 'L',
-                        }
-                    );
-                });
-
-            println!();
+            println!("\n{:?}", MapDebug(new, width));
         }
 
         if old == new {
@@ -170,7 +160,7 @@ fn gol_until_settled(rules: RuleSet, width: usize, height: usize, map: &[Spot]) 
 }
 
 fn gol_round(rules: &RuleSet, old: &[Spot], new: &mut [Spot], width: usize, height: usize) {
-    const DUMP: bool = false;
+    const DUMP: bool = true;
     let seat_adjacent_counts = old
         .iter()
         .zip(all_coordinates(width as i32))
@@ -185,7 +175,7 @@ fn gol_round(rules: &RuleSet, old: &[Spot], new: &mut [Spot], width: usize, heig
         })
         .inspect(|(spot, count, coord)| {
             if DUMP {
-                if coord.0 == 0 {
+                if coord.0 == 0 && coord.1 > 0 {
                     println!();
                 }
 
@@ -209,6 +199,10 @@ fn gol_round(rules: &RuleSet, old: &[Spot], new: &mut [Spot], width: usize, heig
                 x => x,
             };
         }
+    }
+
+    if DUMP {
+        println!("\n");
     }
 }
 
@@ -240,11 +234,37 @@ fn process<I: BufRead>(
         spots.extend(buffer.as_bytes().iter().map(|ch| match ch {
             b'.' => Spot::Floor,
             b'L' => Spot::EmptySeat,
+            #[cfg(test)]
+            b'#' => Spot::TakenSeat,
             x => unreachable!("invalid byte {} in {:?}", x, buffer),
         }));
     }
 
     Ok((width.unwrap(), spots))
+}
+
+struct MapDebug<'a>(&'a [Spot], usize);
+
+impl<'a> fmt::Debug for MapDebug<'a> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0
+            .iter()
+            .zip(all_coordinates(self.1 as i32))
+            .try_for_each(|(spot, (x, _))| {
+                if x == 0 {
+                    write!(fmt, "\n")?;
+                }
+                write!(
+                    fmt,
+                    "{}",
+                    match spot {
+                        Spot::Floor => '.',
+                        Spot::TakenSeat => '#',
+                        Spot::EmptySeat => 'L',
+                    }
+                )
+            })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -289,5 +309,134 @@ L.LLLLL.LL";
     let (width, map) = process(std::io::BufReader::new(std::io::Cursor::new(input))).unwrap();
     let height = map.len() / width;
 
+    let mut first = map.to_vec();
+    let mut second = map.to_vec();
+
+    let mut old = &mut first;
+    let mut new = &mut second;
+
+    let phases = [
+        "#.##.##.##
+#######.##
+#.#.#..#..
+####.##.##
+#.##.##.##
+#.#####.##
+..#.#.....
+##########
+#.######.#
+#.#####.##",
+        "#.LL.LL.L#
+#LLLLLL.LL
+L.L.L..L..
+LLLL.LL.LL
+L.LL.LL.LL
+L.LLLLL.LL
+..L.L.....
+LLLLLLLLL#
+#.LLLLLL.L
+#.LLLLL.L#",
+        "#.L#.##.L#
+#L#####.LL
+L.#.#..#..
+##L#.##.##
+#.##.#L.##
+#.#####.#L
+..#.#.....
+LLL####LL#
+#.L#####.L
+#.L####.L#",
+        "#.L#.L#.L#
+#LLLLLL.LL
+L.L.L..#..
+##LL.LL.L#
+L.LL.LL.L#
+#.LLLLL.LL
+..L.L.....
+LLLLLLLLL#
+#.LLLLL#.L
+#.L#LL#.L#",
+        "#.L#.L#.L#
+#LLLLLL.LL
+L.L.L..#..
+##L#.#L.L#
+L.L#.#L.L#
+#.L####.LL
+..#.#.....
+LLL###LLL#
+#.LLLLL#.L
+#.L#LL#.L#",
+        "#.L#.L#.L#
+#LLLLLL.LL
+L.L.L..#..
+##L#.#L.L#
+L.L#.LL.L#
+#.LLLL#.LL
+..#.L.....
+LLL###LLL#
+#.LLLLL#.L
+#.L#LL#.L#",
+    ];
+
+    for (i, &phase) in phases.iter().enumerate() {
+        gol_round(&RuleSet::PartTwo, old, new, width, height);
+
+        let got = format!("{:?}", MapDebug(new, width));
+        let got = got.trim();
+
+        for (a, b) in got.lines().zip(phase.lines()) {
+            println!("{}\t{}", a, b);
+        }
+        println!();
+
+        if got != phase {
+            panic!("round {} failed", i);
+        }
+
+        std::mem::swap(&mut old, &mut new);
+    }
+
     assert_eq!(gol_until_settled(RuleSet::PartTwo, width, height, &map), 26);
+}
+
+#[test]
+fn part_two_directional_examples() {
+    let map0 = b".......#.
+...#.....
+.#.......
+.........
+..#L....#
+....#....
+.........
+#........
+...#.....";
+    let map1 = b".............
+.L.L.#.#.#.#.
+.............";
+    let map2 = b".##.##.
+#.#.#.#
+##...##
+...L...
+##...##
+#.#.#.#
+.##.##.";
+
+    let examples = [
+        (&map0[..], (4, 4), 8),
+        (&map1[..], (1, 1), 0),
+        (&map2[..], (3, 3), 0),
+    ];
+
+    for &(input, pos, occupied_seats) in &examples {
+        let (width, map) = process(std::io::BufReader::new(std::io::Cursor::new(input))).unwrap();
+        let height = map.len() / width;
+
+        let found = directional_taken(&map, pos, width, height);
+
+        if found != occupied_seats {
+            println!("{:?}", MapDebug(&map, width));
+        }
+
+        assert_eq!(found, occupied_seats);
+    }
 }
