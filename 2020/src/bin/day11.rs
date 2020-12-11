@@ -129,50 +129,11 @@ fn gol_until_settled(rules: RuleSet, width: usize, height: usize, map: &[Spot]) 
     let mut old = &mut first;
     let mut new = &mut second;
 
-    const DUMP: (bool, bool) = (false, true);
+    const DUMP: bool = false;
 
     for i in 0.. {
-        let seat_adjacent_counts = old
-            .iter()
-            .zip(all_coordinates(width as i32))
-            .map(|(spot, coord)| {
-                if *spot == Spot::Floor {
-                    (Spot::Floor, 0, coord)
-                } else {
-                    let count = rules.count_adjacent_taken(&old, coord, width, height);
-                    assert!(count <= 8);
-                    (*spot, count, coord)
-                }
-            })
-            .inspect(|(spot, count, coord)| {
-                if DUMP.0 {
-                    if coord.0 == 0 {
-                        println!();
-                    }
-
-                    match spot {
-                        Spot::Floor => print!("."),
-                        _ => print!("{}", count),
-                    }
-                }
-            })
-            .map(|(spot, count, _)| (spot, count));
-
-        {
-            for (target, (current_spot, count)) in new.iter_mut().zip(seat_adjacent_counts) {
-                *target = match current_spot {
-                    Spot::TakenSeat if count >= rules.too_many_occupied_seats() => Spot::EmptySeat,
-                    Spot::EmptySeat if count == 0 => Spot::TakenSeat,
-                    Spot::Floor => {
-                        assert_eq!(count, 0);
-                        Spot::Floor
-                    }
-                    x => x,
-                };
-            }
-        }
-
-        if DUMP.1 {
+        gol_round(&rules, old, new, width, height);
+        if DUMP {
             println!();
 
             new.iter()
@@ -200,12 +161,55 @@ fn gol_until_settled(rules: RuleSet, width: usize, height: usize, map: &[Spot]) 
 
         std::mem::swap(&mut old, &mut new);
 
-        if i > 7 && (DUMP.0 || DUMP.1) {
+        if i > 7 && DUMP {
             panic!();
         }
     }
 
     first.iter().filter(|&&s| s == Spot::TakenSeat).count()
+}
+
+fn gol_round(rules: &RuleSet, old: &[Spot], new: &mut [Spot], width: usize, height: usize) {
+    const DUMP: bool = false;
+    let seat_adjacent_counts = old
+        .iter()
+        .zip(all_coordinates(width as i32))
+        .map(|(spot, coord)| {
+            if *spot == Spot::Floor {
+                (Spot::Floor, 0, coord)
+            } else {
+                let count = rules.count_adjacent_taken(&old, coord, width, height);
+                assert!(count <= 8);
+                (*spot, count, coord)
+            }
+        })
+        .inspect(|(spot, count, coord)| {
+            if DUMP {
+                if coord.0 == 0 {
+                    println!();
+                }
+
+                match spot {
+                    Spot::Floor => print!("."),
+                    _ => print!("{}", count),
+                }
+            }
+        })
+        .map(|(spot, count, _)| (spot, count));
+
+    {
+        for (target, (current_spot, count)) in new.iter_mut().zip(seat_adjacent_counts) {
+            *target = match current_spot {
+                Spot::TakenSeat if count >= rules.too_many_occupied_seats() => Spot::EmptySeat,
+                Spot::EmptySeat if count == 0 => Spot::TakenSeat,
+                Spot::Floor => {
+                    assert_eq!(count, 0);
+                    Spot::Floor
+                }
+                x => x,
+            };
+        }
+    }
 }
 
 fn process<I: BufRead>(
