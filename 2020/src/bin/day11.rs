@@ -113,19 +113,29 @@ fn directional_taken(old: &[Spot], coord: (i32, i32), width: usize, height: usiz
     directions
         .iter()
         .filter_map(|&(dx, dy)| {
+            #[cfg(test)]
+            println!("looking at direction {:?}", (dx, dy));
             let mut first = (1..)
                 .map(|c| (coord.0 + (c * dx), coord.1 + (c * dy)))
-                .map(|coord| (width, height).to_index(coord))
+                .map(|coord| (width, height).to_index(coord).map(|idx| (idx, coord)))
                 .take_while(|maybe| maybe.is_some())
                 .filter_map(|maybe| maybe)
-                .map(|idx| old[idx])
-                .take_while(|&spot| spot != Spot::Floor);
+                .map(|(idx, coord)| (old[idx], coord))
+                .inspect(|(_spot, _at_coord)| {
+                    #[cfg(test)]
+                    println!("  {:?} looking at {:?} at {:?}", coord, _spot, _at_coord)
+                })
+                .filter(|&(spot, _)| spot != Spot::Floor);
 
-            first.next().map(|kind| match kind {
+            let count = first.next().map(|(kind, _)| match kind {
                 Spot::Floor => unreachable!(),
                 Spot::TakenSeat => 1,
                 Spot::EmptySeat => 0,
-            })
+            });
+
+            #[cfg(test)]
+            println!("  --> {:?}", count);
+            count
         })
         .sum::<usize>()
 }
@@ -137,13 +147,10 @@ fn gol_until_settled(rules: RuleSet, width: usize, height: usize, map: &[Spot]) 
     let mut old = &mut first;
     let mut new = &mut second;
 
-    const DUMP: bool = false;
-
-    for i in 0.. {
+    for _i in 0.. {
         gol_round(&rules, old, new, width, height);
-        if DUMP {
-            println!("\n{:?}", MapDebug(new, width));
-        }
+        #[cfg(test)]
+        println!("\n{:?}", MapDebug(new, width));
 
         if old == new {
             break;
@@ -151,7 +158,8 @@ fn gol_until_settled(rules: RuleSet, width: usize, height: usize, map: &[Spot]) 
 
         std::mem::swap(&mut old, &mut new);
 
-        if i > 7 && DUMP {
+        #[cfg(test)]
+        if _i > 7 {
             panic!();
         }
     }
@@ -160,7 +168,6 @@ fn gol_until_settled(rules: RuleSet, width: usize, height: usize, map: &[Spot]) 
 }
 
 fn gol_round(rules: &RuleSet, old: &[Spot], new: &mut [Spot], width: usize, height: usize) {
-    const DUMP: bool = true;
     let seat_adjacent_counts = old
         .iter()
         .zip(all_coordinates(width as i32))
@@ -173,15 +180,16 @@ fn gol_round(rules: &RuleSet, old: &[Spot], new: &mut [Spot], width: usize, heig
                 (*spot, count, coord)
             }
         })
-        .inspect(|(spot, count, coord)| {
-            if DUMP {
-                if coord.0 == 0 && coord.1 > 0 {
+        .inspect(|(_spot, _count, _coord)| {
+            #[cfg(test)]
+            {
+                if _coord.0 == 0 && _coord.1 > 0 {
                     println!();
                 }
 
-                match spot {
+                match _spot {
                     Spot::Floor => print!("."),
-                    _ => print!("{}", count),
+                    _ => print!("{}", _count),
                 }
             }
         })
@@ -201,9 +209,8 @@ fn gol_round(rules: &RuleSet, old: &[Spot], new: &mut [Spot], width: usize, heig
         }
     }
 
-    if DUMP {
-        println!("\n");
-    }
+    #[cfg(test)]
+    println!("\n");
 }
 
 fn process<I: BufRead>(
@@ -422,7 +429,7 @@ fn part_two_directional_examples() {
 .##.##.";
 
     let examples = [
-        (&map0[..], (4, 4), 8),
+        (&map0[..], (3, 4), 8),
         (&map1[..], (1, 1), 0),
         (&map2[..], (3, 3), 0),
     ];
