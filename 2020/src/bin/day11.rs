@@ -57,19 +57,20 @@ impl RuleSet {
     }
 }
 
-fn vanilla_taken(old: &[Spot], coord: (i32, i32), width: usize, height: usize) -> usize {
-    let adjacent = [
-        (-1, -1),
-        (0, -1),
-        (1, -1),
-        (-1, 0),
-        (1, 0),
-        (-1, 1),
-        (0, 1),
-        (1, 1),
-    ];
+static DIRECTION_OFFSETS: [(i32, i32); 8] = [
+    (-1, -1),
+    (0, -1),
+    (1, -1),
+    (-1, 0),
+    (1, 0),
+    (-1, 1),
+    (0, 1),
+    (1, 1),
+];
 
-    adjacent
+fn vanilla_taken(old: &[Spot], coord: (i32, i32), width: usize, height: usize) -> usize {
+    // just look at each direction
+    DIRECTION_OFFSETS
         .iter()
         .zip(std::iter::repeat(coord))
         .filter_map(|(a, b)| (width, height).to_index((a.0 + b.0, a.1 + b.1)))
@@ -98,43 +99,42 @@ impl MapSize for (usize, usize) {
 }
 
 fn directional_taken(old: &[Spot], coord: (i32, i32), width: usize, height: usize) -> usize {
-    let directions = [
-        (-1, -1),
-        (0, -1),
-        (1, -1),
-        (-1, 0),
-        (1, 0),
-        (-1, 1),
-        (0, 1),
-        (1, 1),
-    ];
-
-    directions
+    DIRECTION_OFFSETS
         .iter()
-        .filter_map(|&(dx, dy)| {
+        .inspect(|_dir| {
             #[cfg(test)]
-            println!("looking at direction {:?}", (dx, dy));
+            println!("looking at direction {:?}", _dir);
+        })
+        .filter_map(|&(dx, dy)| {
+            // walk multiple into this direction
             let mut first = (1..)
                 .map(|c| (coord.0 + (c * dx), coord.1 + (c * dy)))
                 .map(|coord| (width, height).to_index(coord).map(|idx| (idx, coord)))
+                // take_while the index is on the map
                 .take_while(|maybe| maybe.is_some())
-                .filter_map(|maybe| maybe)
+                // unwrap the Option<usize>
+                .map(|maybe| maybe.expect("this must be Some because would had stopped on None"))
                 .map(|(idx, coord)| (old[idx], coord))
                 .inspect(|(_spot, _at_coord)| {
                     #[cfg(test)]
                     println!("  {:?} looking at {:?} at {:?}", coord, _spot, _at_coord)
                 })
+                // filter out the floors so that the first is either a seat or nothing
                 .filter(|&(spot, _)| spot != Spot::Floor);
 
+            // we want to find the number of taken seats in every direction so use one and zero
+            // to be able to sum them up
             let count = first.next().map(|(kind, _)| match kind {
                 Spot::Floor => unreachable!(),
                 Spot::TakenSeat => 1,
                 Spot::EmptySeat => 0,
             });
 
-            #[cfg(test)]
-            println!("  --> {:?}", count);
             count
+        })
+        .inspect(|_count| {
+            #[cfg(test)]
+            println!("  --> {:?}", _count);
         })
         .sum::<usize>()
 }
