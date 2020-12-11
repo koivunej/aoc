@@ -1,4 +1,3 @@
-use std::convert::TryInto;
 use std::fmt;
 use std::io::BufRead;
 
@@ -15,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     println!("{}", part_two);
 
     assert_eq!(part_one, 2183);
-    assert_eq!(part_two, 2183);
+    assert_eq!(part_two, 1990);
 
     Ok(())
 }
