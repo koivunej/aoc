@@ -192,18 +192,16 @@ fn gol_round(rules: &RuleSet, old: &[Spot], new: &mut [Spot], width: usize, heig
         })
         .map(|(spot, count, _)| (spot, count));
 
-    {
-        for (target, (current_spot, count)) in new.iter_mut().zip(seat_adjacent_counts) {
-            *target = match current_spot {
-                Spot::TakenSeat if count >= rules.too_many_occupied_seats() => Spot::EmptySeat,
-                Spot::EmptySeat if count == 0 => Spot::TakenSeat,
-                Spot::Floor => {
-                    assert_eq!(count, 0);
-                    Spot::Floor
-                }
-                x => x,
-            };
-        }
+    for (target, (current_spot, count)) in new.iter_mut().zip(seat_adjacent_counts) {
+        *target = match current_spot {
+            Spot::TakenSeat if count >= rules.too_many_occupied_seats() => Spot::EmptySeat,
+            Spot::EmptySeat if count == 0 => Spot::TakenSeat,
+            Spot::Floor => {
+                assert_eq!(count, 0);
+                Spot::Floor
+            }
+            x => x,
+        };
     }
 
     #[cfg(test)]
