@@ -1,6 +1,9 @@
 pub mod io {
+    use either::Either;
     use std::io::BufRead;
+    use std::str::FromStr;
 
+    // this didn't turn out to be so great idea
     pub struct EmptyLineSeparated<R: BufRead> {
         in_record: bool,
         buffer: String,
@@ -52,6 +55,44 @@ pub mod io {
                 } else {
                     self.in_record = true;
                 }
+            }
+        }
+    }
+
+    pub struct OnePerLine<I, T> {
+        input: I,
+        buffer: String,
+        _type_of_t: std::marker::PhantomData<T>,
+    }
+
+    impl<I: BufRead, T: FromStr> OnePerLine<I, T> {
+        pub fn new(input: I) -> Self {
+            Self {
+                input,
+                buffer: String::new(),
+                _type_of_t: Default::default(),
+            }
+        }
+    }
+
+    impl<I, T> Iterator for OnePerLine<I, T>
+    where
+        I: BufRead,
+        T: FromStr + 'static,
+        T::Err: 'static,
+    {
+        type Item = Result<T, Either<T::Err, std::io::Error>>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.buffer.clear();
+            let read = self.input.read_line(&mut self.buffer);
+            match read {
+                Ok(0) => None,
+                Ok(_) => match T::from_str(self.buffer.trim()) {
+                    Ok(t) => Some(Ok(t)),
+                    Err(e) => Some(Err(Either::Left(e))),
+                },
+                Err(e) => Some(Err(Either::Right(e))),
             }
         }
     }
