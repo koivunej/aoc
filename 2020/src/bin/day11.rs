@@ -124,13 +124,11 @@ fn directional_taken(old: &[Spot], coord: (i32, i32), width: usize, height: usiz
 
             // we want to find the number of taken seats in every direction so use one and zero
             // to be able to sum them up
-            let count = first.next().map(|(kind, _)| match kind {
+            first.next().map(|(kind, _)| match kind {
                 Spot::Floor => unreachable!(),
                 Spot::TakenSeat => 1,
                 Spot::EmptySeat => 0,
-            });
-
-            count
+            })
         })
         .inspect(|_count| {
             #[cfg(test)]
@@ -258,7 +256,7 @@ impl<'a> fmt::Debug for MapDebug<'a> {
             .zip(all_coordinates(self.1 as i32))
             .try_for_each(|(spot, (x, _))| {
                 if x == 0 {
-                    write!(fmt, "\n")?;
+                    writeln!(fmt)?;
                 }
                 write!(
                     fmt,

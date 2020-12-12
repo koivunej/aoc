@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
                 .any(|(i, l)| sorted_preample.keys().take(i).any(|&s| s + l == num));
 
             if !valid {
-                part_one = part_one.or(Some((all.len(), num)));
+                part_one = part_one.or_else(|| Some((all.len(), num)));
             }
 
             let oldest = all[preample_start];
@@ -148,15 +148,17 @@ fn find_weakness((part_one_index, part_one): (usize, u64), all: &[u64]) -> u64 {
                 }
             }
 
-            while any_overflown {
-                // remove such sums from the front which we no longer need to calculate
-                sums_hwm = sums_hwm.max(sums.len());
+            if any_overflown {
+                loop {
+                    // remove such sums from the front which we no longer need to calculate
+                    sums_hwm = sums_hwm.max(sums.len());
 
-                match sums.front() {
-                    Some((_, over)) if *over > part_one => {
-                        sums.pop_front();
+                    match sums.front() {
+                        Some((_, over)) if *over > part_one => {
+                            sums.pop_front();
+                        }
+                        _ => break,
                     }
-                    _ => break,
                 }
             }
         }
