@@ -30,6 +30,7 @@ version = "0.1.0"
 dependencies = [
  "bitvec",
  "dhat",
+ "either",
  "indexmap",
  "itertools",
  "lazy_static",

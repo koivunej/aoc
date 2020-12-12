@@ -6,7 +6,7 @@ use std::str::FromStr;
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let stdin = std::io::stdin();
 
-    let mut adapter = Adapter::<_, Op>::new(stdin.lock());
+    let mut adapter = OnePerLine::<_, Op>::new(stdin.lock());
 
     let (part_one, part_two) = adapter
         .try_fold(
@@ -36,15 +36,15 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     Ok(())
 }
 
-struct Adapter<I, T> {
+struct OnePerLine<I, T> {
     input: I,
     buffer: String,
     _type_of_t: std::marker::PhantomData<T>,
 }
 
-impl<I: BufRead, T: FromStr> Adapter<I, T> {
+impl<I: BufRead, T: FromStr> OnePerLine<I, T> {
     fn new(input: I) -> Self {
-        Adapter {
+        Self {
             input,
             buffer: String::new(),
             _type_of_t: Default::default(),
@@ -52,33 +52,9 @@ impl<I: BufRead, T: FromStr> Adapter<I, T> {
     }
 }
 
-#[derive(Debug)]
-enum Either<A, B> {
-    Left(A),
-    Right(B),
-}
+use either::Either;
 
-impl<A: fmt::Display, B: fmt::Display> fmt::Display for Either<A, B> {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Either::Left(e) => write!(fmt, "{}: {}", std::any::type_name::<A>(), &e),
-            Either::Right(e) => write!(fmt, "{}: {}", std::any::type_name::<B>(), &e),
-        }
-    }
-}
-
-impl<A: std::error::Error + 'static, B: std::error::Error + 'static> std::error::Error
-    for Either<A, B>
-{
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Either::Left(e) => Some(e),
-            Either::Right(e) => Some(e),
-        }
-    }
-}
-
-impl<I, T> Iterator for Adapter<I, T>
+impl<I, T> Iterator for OnePerLine<I, T>
 where
     I: BufRead,
     T: FromStr + 'static,
