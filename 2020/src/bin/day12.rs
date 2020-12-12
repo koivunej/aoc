@@ -1,33 +1,29 @@
 use std::convert::TryFrom;
+use std::fmt;
 use std::io::BufRead;
 use std::str::FromStr;
 
 fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let stdin = std::io::stdin();
-    let mut stdin = stdin.lock();
-    let mut buffer = String::new();
 
-    let mut ship = Ship::default();
-    let mut other = WaypointGuidedShip::default();
+    let mut adapter = Adapter::<_, Op>::new(stdin.lock());
 
-    loop {
-        buffer.clear();
+    let (part_one, part_two) = adapter
+        .try_fold(
+            (Ship::default(), WaypointGuidedShip::default()),
+            |(mut a, mut b), op| match op {
+                Ok(op) => {
+                    a.execute(op);
+                    b.execute(op);
+                    Ok((a, b))
+                }
+                Err(e) => Err(e),
+            },
+        )
+        .unwrap();
 
-        let read = stdin.read_line(&mut buffer)?;
-
-        if read == 0 {
-            break;
-        }
-
-        let op = buffer.trim().parse::<Op>().unwrap();
-        ship.execute(op);
-        other.execute(op);
-
-        println!("{:?}", other);
-    }
-
-    let part_one = ship.manhattan_distance();
-    let part_two = other.manhattan_distance();
+    let part_one = part_one.manhattan_distance();
+    let part_two = part_two.manhattan_distance();
 
     println!("{}", part_one);
     println!("{}", part_two);
@@ -38,6 +34,70 @@ fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     assert_eq!(part_two, 24769);
 
     Ok(())
+}
+
+struct Adapter<I, T> {
+    input: I,
+    buffer: String,
+    _type_of_t: std::marker::PhantomData<T>,
+}
+
+impl<I: BufRead, T: FromStr> Adapter<I, T> {
+    fn new(input: I) -> Self {
+        Adapter {
+            input,
+            buffer: String::new(),
+            _type_of_t: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum Either<A, B> {
+    Left(A),
+    Right(B),
+}
+
+impl<A: fmt::Display, B: fmt::Display> fmt::Display for Either<A, B> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Either::Left(e) => write!(fmt, "{}: {}", std::any::type_name::<A>(), &e),
+            Either::Right(e) => write!(fmt, "{}: {}", std::any::type_name::<B>(), &e),
+        }
+    }
+}
+
+impl<A: std::error::Error + 'static, B: std::error::Error + 'static> std::error::Error
+    for Either<A, B>
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Either::Left(e) => Some(e),
+            Either::Right(e) => Some(e),
+        }
+    }
+}
+
+impl<I, T> Iterator for Adapter<I, T>
+where
+    I: BufRead,
+    T: FromStr + 'static,
+    T::Err: 'static,
+{
+    type Item = Result<T, Either<T::Err, std::io::Error>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.buffer.clear();
+        let read = self.input.read_line(&mut self.buffer);
+        match read {
+            Ok(0) => None,
+            Ok(_) => match T::from_str(self.buffer.trim()) {
+                Ok(t) => Some(Ok(t)),
+                Err(e) => Some(Err(Either::Left(e))),
+            },
+            Err(e) => Some(Err(Either::Right(e))),
+        }
+    }
 }
 
 #[derive(Debug)]
