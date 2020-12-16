@@ -11,8 +11,9 @@ fn main() {
     assert_eq!(part_one, 234);
 }
 fn process(starting_numbers: &[u32], nth: u32) -> u32 {
-    use std::collections::btree_map::Entry;
-    let mut last_turn = std::collections::BTreeMap::new();
+    //use std::collections::{btree_map::Entry, BTreeMap as Collection};
+    use std::collections::{hash_map::Entry, HashMap as Collection};
+    let mut last_turn = Collection::new();
 
     starting_numbers
         .iter()
